@@ -1,0 +1,415 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &7940312294264172722
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4f00142cb829ed47a8050b3b6c3cefdc, type: 3}
+  m_Name: DirectionalBlur
+  m_EditorClassIdentifier: 
+  active: 1
+  blurType:
+    m_OverrideState: 1
+    m_Value: 0
+  blurStrength:
+    m_OverrideState: 1
+    m_Value: 0
+  blurDirection:
+    m_OverrideState: 1
+    m_Value: 0
+  blurCenterPosition:
+    m_OverrideState: 0
+    m_Value: {x: 0, y: 0}
+--- !u!114 &3167459012539246572
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cce266fdc1472e19f1cce3b2cc65fc5, type: 3}
+  m_Name: Solarisation
+  m_EditorClassIdentifier: 
+  active: 1
+  solarisation:
+    m_OverrideState: 1
+    m_Value: 0
+--- !u!114 &-4819117300471805002
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a3c7b50ceaa7ac75808cf54b5f76e82c, type: 3}
+  m_Name: IncidentLight
+  m_EditorClassIdentifier: 
+  active: 1
+  incidentLightUse:
+    m_OverrideState: 1
+    m_Value: 1
+  incidentLightAddBlend:
+    m_OverrideState: 1
+    m_Value: 1
+  incidentLightColor:
+    m_OverrideState: 1
+    m_Value: {r: 0, g: 0, b: 0, a: 1}
+  incidentLightPosition:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  incidentLightLength:
+    m_OverrideState: 1
+    m_Value: 0
+--- !u!114 &-5376854528122268492
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2f8577ff9164d9961a3814046f372bc4, type: 3}
+  m_Name: Saturation
+  m_EditorClassIdentifier: 
+  active: 1
+  saturation:
+    m_OverrideState: 1
+    m_Value: 1
+--- !u!114 &1893903543375401438
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9489b2cae99141c4441cb62bb8b43665, type: 3}
+  m_Name: SekaiDof
+  m_EditorClassIdentifier: 
+  active: 1
+  focusDistance:
+    m_OverrideState: 1
+    m_Value: 2
+  aperture:
+    m_OverrideState: 1
+    m_Value: 6.5
+  focalLength:
+    m_OverrideState: 1
+    m_Value: 150
+  disableForeBokeh:
+    m_OverrideState: 0
+    m_Value: 1
+--- !u!114 &-9086755063586691472
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f362cd58f6ee97c4651dbdc8979aae9f, type: 3}
+  m_Name: ChromaticAberration
+  m_EditorClassIdentifier: 
+  active: 1
+  ChromaticAberrationMode:
+    m_OverrideState: 1
+    m_Value: 0
+  OffsetR:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  OffsetG:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  OffsetB:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  ScaleR:
+    m_OverrideState: 1
+    m_Value: 0
+  ScaleG:
+    m_OverrideState: 1
+    m_Value: 0
+  ScaleB:
+    m_OverrideState: 1
+    m_Value: 0
+--- !u!114 &5176398796792292204
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b358a17a409184cfc7374f3f55bc9112, type: 3}
+  m_Name: LegacyDof
+  m_EditorClassIdentifier: 
+  active: 1
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7fd9488000d3734a9e00ee676215985, type: 3}
+  m_Name: LegacyMV
+  m_EditorClassIdentifier: 
+  components:
+  - {fileID: -5283327256568120914}
+  - {fileID: -4819117300471805002}
+  - {fileID: -5376854528122268492}
+  - {fileID: 3167459012539246572}
+  - {fileID: -7023530367879814339}
+  - {fileID: 823221910467978720}
+  - {fileID: 5665873396450059656}
+  - {fileID: -1227038354356795533}
+  - {fileID: 5715263451059365619}
+  - {fileID: 5176398796792292204}
+  - {fileID: 1893903543375401438}
+  - {fileID: 7940312294264172722}
+  - {fileID: 6944281313773429593}
+  - {fileID: 6125738793155194266}
+  - {fileID: -2567762427684711906}
+  - {fileID: -9086755063586691472}
+--- !u!114 &5665873396450059656
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 540e0a888ffdb5eba41afec89b9516fa, type: 3}
+  m_Name: LegacyLut
+  m_EditorClassIdentifier: 
+  active: 1
+  frontTex:
+    m_OverrideState: 1
+    m_Value: {fileID: 0}
+    dimension: 1
+  backTex:
+    m_OverrideState: 1
+    m_Value: {fileID: 0}
+    dimension: 1
+  frontBlend:
+    m_OverrideState: 1
+    m_Value: 0
+  backBlend:
+    m_OverrideState: 1
+    m_Value: 0
+  frontPoint:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  frontNonPoint:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  backPoint:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  backNonPoint:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+--- !u!114 &6944281313773429593
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b6ede1e7ca2a5330bd62bb8d424a2008, type: 3}
+  m_Name: Antialiasing
+  m_EditorClassIdentifier: 
+  active: 1
+  mode:
+    m_OverrideState: 1
+    m_Value: 1
+  antialiasingQuality:
+    m_OverrideState: 0
+    m_Value: 2
+--- !u!114 &6125738793155194266
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b3d958863c2152cb44773d64abe5d1d6, type: 3}
+  m_Name: Vignette
+  m_EditorClassIdentifier: 
+  active: 1
+  color:
+    m_OverrideState: 0
+    m_Value: {r: 0, g: 0, b: 0, a: 1}
+  center:
+    m_OverrideState: 0
+    m_Value: {x: 0.5, y: 0.5}
+  intensity:
+    m_OverrideState: 0
+    m_Value: 0
+  smoothness:
+    m_OverrideState: 0
+    m_Value: 0.2
+  roundness:
+    m_OverrideState: 0
+    m_Value: 0
+--- !u!114 &-5283327256568120914
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6774c760ae6bf3bde5bb235d4ffea83a, type: 3}
+  m_Name: LightOverlay
+  m_EditorClassIdentifier: 
+  active: 1
+  brightColor:
+    m_OverrideState: 1
+    m_Value: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  darkColor:
+    m_OverrideState: 1
+    m_Value: {r: 0.5, g: 0.5, b: 0.5, a: 1}
+  brightPosition:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+  darkPosition:
+    m_OverrideState: 1
+    m_Value: {x: 0, y: 0}
+--- !u!114 &-7023530367879814339
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c002e36ce3b1e186cb6616277c30de98, type: 3}
+  m_Name: FadeOut
+  m_EditorClassIdentifier: 
+  active: 1
+  fadeOut:
+    m_OverrideState: 1
+    m_Value: 0.5
+  fadeOutLerp:
+    m_OverrideState: 0
+    m_Value: 0.5
+--- !u!114 &-2567762427684711906
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 91883208a1c832b125d1abb7a243c887, type: 3}
+  m_Name: ScreenDistortion
+  m_EditorClassIdentifier: 
+  active: 1
+  IntensityAmount:
+    m_OverrideState: 0
+    m_Value: 0
+  ScaleAmount:
+    m_OverrideState: 0
+    m_Value: 30
+  OffsetAmount:
+    m_OverrideState: 0
+    m_Value: 0
+  UseNoise:
+    m_OverrideState: 0
+    m_Value: 0
+  NoiseScale:
+    m_OverrideState: 0
+    m_Value: {x: 1, y: 1}
+  NoiseScrollSpeed:
+    m_OverrideState: 0
+    m_Value: {x: 0, y: 0}
+  Time:
+    m_OverrideState: 0
+    m_Value: 0
+--- !u!114 &5715263451059365619
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1831fa947a61bbac08b9776d7a69b53e, type: 3}
+  m_Name: FadeOutBeforeProp
+  m_EditorClassIdentifier: 
+  active: 1
+  fadeOutBeforeProp:
+    m_OverrideState: 1
+    m_Value: 0.5
+  fadeOutBeforePropLerp:
+    m_OverrideState: 1
+    m_Value: 0.5
+--- !u!114 &823221910467978720
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fd86325128d749ddce976552588f18b4, type: 3}
+  m_Name: SaturationBlur
+  m_EditorClassIdentifier: 
+  active: 1
+  saturationBlurType:
+    m_OverrideState: 1
+    m_Value: 0
+  saturation:
+    m_OverrideState: 1
+    m_Value: 1
+  alpha:
+    m_OverrideState: 1
+    m_Value: 0
+--- !u!114 &-1227038354356795533
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7e37eaf6bd4ab2f00471aad793c6b269, type: 3}
+  m_Name: LegacyBloom
+  m_EditorClassIdentifier: 
+  active: 1
+  intensity:
+    m_OverrideState: 1
+    m_Value: 0.1
+  scatter:
+    m_OverrideState: 1
+    m_Value: 2
+  useNewBlend:
+    m_OverrideState: 1
+    m_Value: 0

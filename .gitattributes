@@ -1,0 +1,14 @@
+* text=auto
+*.cs text eol=lf
+*.shader text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.meta text eol=lf
+*.unity text eol=lf
+*.asset text eol=lf
+*.ps1 text eol=crlf
+*.dll binary
+*.otf binary
+*.ttf binary
+*.png binary
+*.bytes binary
