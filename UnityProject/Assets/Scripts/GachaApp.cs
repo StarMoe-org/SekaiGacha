@@ -460,10 +460,18 @@ namespace SekaiGacha
                 director.GetComponent<CP.Timeline.LoopWaitTimeline>().Trigger = true;
                 Audio.PlaySe("SE_GACHA_TAP_3RD_ANV");
                 var state = new GachaSpawnPlayback(root);
-                bool next = false;
-                while (!next && !skipRequested)
+                // 原版 NextState 在判定的同一帧隐藏开场并开始揭卡（判定里减去 deltaTime 正是为此）。
+                // 若判定后再等一帧，时间轴会越过内容末尾，白闪之后露出一帧 3D 场景。
+                while (!skipRequested)
                 {
+                    bool next = false;
                     state.Execute(() => next = true, Audio.PlaySe);
+                    if (next)
+                    {
+                        double end = director.duration - director.GetComponent<CP.Timeline.LoopWaitTimeline>().TriggerInvokedOffesetTime;
+                        Debug.Log("GACHA_INTRO_END time=" + director.time.ToString("F3") + " step=" + Time.deltaTime.ToString("F3") + " end=" + end.ToString("F3"));
+                        yield break;
+                    }
                     yield return null;
                 }
             }
