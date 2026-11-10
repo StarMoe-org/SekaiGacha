@@ -74,14 +74,15 @@ public static class GachaBuild
         if (app.DrawCount != 10) return;
         if (SessionState.GetBool("GachaSmoke", false))
         {
-            if (app.RevealedCount >= 1 && app.Audio.VoicePeak > 0)
+            // 卡池模拟可能抽到没有获得语音的卡，此时只要求已揭卡。
+            if (app.RevealedCount >= 1 && (app.Audio.VoicePeak > 0 || app.Audio.MissingVoiceCount >= app.RevealedCount))
             {
                 if (UnityEngine.Object.FindObjectsOfType<Canvas>(true).Length != 0) { Finish("检测到额外界面", false); return; }
                 Finish("默认十连自动进入原版演出和卡牌语音；没有 Canvas 界面", true);
             }
         }
         else if (app.Phase == "完成")
-            Finish("十连播放完成，揭卡=" + app.RevealedCount + "，语音=" + app.Audio.VoiceCount + "，最大帧耗时=" + app.MaximumFrameMs + "ms", app.RevealedCount == 10 && app.Audio.VoiceCount == 10 && app.Audio.VoicePeak > 0);
+            Finish("十连播放完成，揭卡=" + app.RevealedCount + "，语音=" + app.Audio.VoiceCount + "，无语音资源=" + app.Audio.MissingVoiceCount + "，最大帧耗时=" + app.MaximumFrameMs + "ms", app.RevealedCount == 10 && app.Audio.VoiceCount + app.Audio.MissingVoiceCount == 10 && (app.Audio.VoiceCount == 0 || app.Audio.VoicePeak > 0));
     }
     static void OnLog(string message, string stack, LogType type)
     {

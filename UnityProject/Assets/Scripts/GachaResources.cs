@@ -154,6 +154,9 @@ namespace SekaiGacha
             return result;
         }
         public T[] All<T>(string bundle) where T : UnityEngine.Object => offline ? offline.entries.Where(e => e.bundle == bundle).Select(e => e.asset).OfType<T>().Distinct().ToArray() : loaded[bundle].LoadAllAssets<T>();
+        // 离线（WebGL）时只含预先打包的资源。
+        public bool IsOffline => offline;
+        public bool Has(string bundle) => offline ? offline.entries.Any(e => e.bundle == bundle) : bundles?[bundle] != null;
         void Rebind(GameObject prefab)
         {
             foreach (var renderer in prefab.GetComponentsInChildren<Renderer>(true))

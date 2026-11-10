@@ -12,6 +12,9 @@
 /.idea/
 /.vscode/
 *.csproj
+!/Tests/**/*.csproj
+/Tests/**/bin/
+/Tests/**/obj/
 *.sln
 *.suo
 *.user

@@ -3,7 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using SekaiGacha.Simulation;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Playables;
@@ -25,6 +27,9 @@ namespace SekaiGacha
         public PlayableDirector CurrentDirector { get; private set; }
         public GachaAudio Audio { get; private set; }
         public GachaResources Assets { get; private set; }
+        // Resources/GachaPool.json 存在时加载的卡池；否则为 null，沿用 CardCatalog 随机演示。
+        public GachaLottery Lottery { get; private set; }
+        public GachaPrize[] CurrentPrizes { get; private set; }
         public float MaximumFrameMs { get; private set; }
         public int SlowFrames { get; private set; }
         public event Action PlaybackCompleted;
@@ -58,6 +63,18 @@ namespace SekaiGacha
         IEnumerator Initialize()
         {
             var catalog = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"].Select(c => (string)c["id"]).ToArray();
+            GachaPrize[] firstPrizes = null;
+            var poolAsset = Resources.Load<TextAsset>("GachaPool");
+            // 离线（WebGL）资源只含 CardCatalog 的卡，抽到其他卡会缺资源，因此只在在线模式使用卡池。
+            if (poolAsset && Assets.IsOffline) Debug.Log("GACHA_POOL_SKIPPED_OFFLINE");
+            else if (poolAsset)
+            {
+                // 卡池由 Tools/extract_gacha_pool.py 生成；首个十连用卡池模拟，只加载本次抽到的卡。
+                var pool = JsonConvert.DeserializeObject<GachaPool>(poolAsset.text);
+                Lottery = new GachaLottery(pool, GachaLottery.DefaultWishSelection(pool));
+                firstPrizes = Draw(Lottery.DefaultTenPullBehavior());
+                catalog = Names(firstPrizes).Distinct().ToArray();
+            }
             yield return Assets.Initialize();
             yield return Assets.Load("live_pv/sp/gacha/main", "live_pv/sp/gacha/signal", "effect_asset/gacha_obtain_prize", "gacha/sound/se/se_gacha", "character/label", "live_pv/model/mesh_flare_para/textures/9200");
             Audio.Initialize();
@@ -76,8 +93,33 @@ namespace SekaiGacha
             yield return new WaitForEndOfFrame();
             Phase = "就绪";
             Debug.Log("GACHA_READY");
-            PlayCards(Enumerable.Range(0, 10).Select(_ => catalog[UnityEngine.Random.Range(0, catalog.Length)]).ToArray());
+            if (firstPrizes != null) PlayPrizes(firstPrizes);
+            else PlayCards(Enumerable.Range(0, 10).Select(_ => catalog[UnityEngine.Random.Range(0, catalog.Length)]).ToArray());
         }
+        // 用已加载的卡池执行一次抽卡行为并播放结果。
+        public GachaPrize[] PlaySpin(int behaviorId)
+        {
+            if (Lottery == null) throw new InvalidOperationException("未加载卡池 Resources/GachaPool.json");
+            var behavior = Lottery.FindBehavior(behaviorId);
+            if (behavior.spinCount > 10) throw new ArgumentException("演出最多 10 张，抽卡行为 " + behaviorId + " 为 " + behavior.spinCount + " 抽", nameof(behaviorId));
+            if (busy || (Phase != "就绪" && Phase != "完成")) throw new InvalidOperationException("演出正在进行");
+            var prizes = Draw(behavior);
+            PlayPrizes(prizes);
+            return prizes;
+        }
+        void PlayPrizes(GachaPrize[] prizes)
+        {
+            PlayCards(Names(prizes));
+            CurrentPrizes = prizes;
+        }
+        GachaPrize[] Draw(MasterGachaBehavior behavior)
+        {
+            var prizes = Lottery.Spin(behavior, new SystemRandomSource());
+            Debug.Log("GACHA_DRAW gacha=" + Lottery.Gacha.id + " behavior=" + behavior.id + " " + string.Join(" ", prizes.Select(p =>
+                p.Card.assetbundleName + "(" + p.Card.cardRarityType + (p.IsGuaranteedSlot ? ",保底" : "") + ")")));
+            return prizes;
+        }
+        static string[] Names(GachaPrize[] prizes) => prizes.Select(p => p.Card.assetbundleName).ToArray();
         static GameObject InstantiateForSetup(GameObject prefab)
         {
             // 先完成管理器和轨道绑定，再由外壳启动原版 Timeline。
@@ -90,8 +132,18 @@ namespace SekaiGacha
             foreach (string id in results.Distinct())
             {
                 if (cards.ContainsKey(id)) continue;
-                yield return Assets.Load("character/member/" + id, "sound/gacha/get_voice/" + id);
-                Audio.Load(Assets, "sound/gacha/get_voice/" + id);
+                // 卡池模拟会抽到 ★2/★3；资源清单里没有获得语音的卡只显示卡面，不播语音。
+                string voice = "sound/gacha/get_voice/" + id;
+                if (Assets.Has(voice))
+                {
+                    yield return Assets.Load("character/member/" + id, voice);
+                    Audio.Load(Assets, voice);
+                }
+                else
+                {
+                    Debug.LogWarning("GACHA_NO_VOICE " + id);
+                    yield return Assets.Load("character/member/" + id);
+                }
                 var texture = Assets.Get<Texture2D>("character/member/" + id, "card_normal");
                 cards.Add(id, Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f)));
             }
@@ -103,6 +155,7 @@ namespace SekaiGacha
             if (results == null || results.Length < 1 || results.Length > 10 || results.Any(id => !System.Text.RegularExpressions.Regex.IsMatch(id ?? "", @"^res\d+_no\d+$")))
                 throw new ArgumentException("需要 1 至 10 个有效卡牌资源名", nameof(results));
             CurrentResults = (string[])results.Clone();
+            CurrentPrizes = null;
             busy = true;
             StartCoroutine(Guard(Play()));
         }
