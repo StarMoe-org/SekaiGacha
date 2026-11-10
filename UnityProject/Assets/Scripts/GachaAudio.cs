@@ -58,6 +58,15 @@ namespace SekaiGacha
             if (sheet == null) throw new InvalidOperationException("音频资源加载失败 " + bundle);
             sheets.Add(bundle, sheet);
         }
+        // 原版 SoundManager 从 StreamingAssets 加载的内置音频表（MenuCommon_Built_in 含 SE_DECIDE1 等通用音效），
+        // 这里放在 Resources。
+        public void LoadBuiltIn(string name)
+        {
+            if (sheets.ContainsKey(name)) return;
+            var sheet = CriAtomExAcb.LoadAcbData(Resources.Load<TextAsset>(name + ".acb").bytes, null, null);
+            if (sheet == null) throw new InvalidOperationException("音频资源加载失败 " + name);
+            sheets.Add(name, sheet);
+        }
         public void Stop()
         {
             se?.Stop();

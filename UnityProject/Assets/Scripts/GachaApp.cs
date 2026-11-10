@@ -101,6 +101,7 @@ namespace SekaiGacha
             phraseMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha2");
             Audio.Initialize();
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
+            Audio.LoadBuiltIn("MenuCommon_Built_in");
             yield return LoadCards(catalog);
             main = InstantiateForSetup(Assets.Get<GameObject>("live_pv/sp/gacha/main", "MainTimeline"));
             main.name = "OriginalGachaTimeline";
@@ -612,11 +613,12 @@ namespace SekaiGacha
             tapToStart.SetActive(false);
         }
         // 播放中（含下载卡牌时）请求跳过，演出在下一帧停到结束画面。
-        // 原版 OnClickSkipButton：（SE_DECIDE1，系统音效未收录）隐藏 TapToStart，triggerSkip，StopSEAll，NextState。
-        // 下载卡牌期间按下时，开场开始前就进入跳过模式。
+        // 原版 OnClickSkipButton：PlaySEOneShot("SE_DECIDE1")，隐藏 TapToStart，triggerSkip，StopSEAll，NextState。
+        // 顺序照原版：确认音刚开始就被 StopSEAll 停掉，原版也是如此。下载卡牌期间按下时，开场开始前就进入跳过模式。
         public void Skip()
         {
             if (!busy) return;
+            Audio.PlaySe("SE_DECIDE1");
             tapToStart.SetActive(false);
             triggerSkip = true;
             Audio.StopSe();
