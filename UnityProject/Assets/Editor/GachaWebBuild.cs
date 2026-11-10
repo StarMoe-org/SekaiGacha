@@ -7,6 +7,9 @@ using UnityEngine;
 
 public static class GachaWebBuild
 {
+    // 单张卡牌的卡面和语音运行时从资源桶下载，不打包进构建。
+    static readonly string[] RuntimeBundles = { "character/member/", "character/member_small/", "sound/gacha/get_voice/" };
+
     static void PrepareCatalog()
     {
         var entries = AssetDatabase.GetAllAssetPaths()
@@ -18,7 +21,7 @@ public static class GachaWebBuild
                     asset is UnityEngine.Timeline.SignalAsset || asset is Sekai.Core.MeshFlareParaTexData)
                 .Select(asset => new GachaOfflineCatalog.Entry {
                     bundle = AssetImporter.GetAtPath(path).assetBundleName, name = asset.name, asset = asset }))
-            .Where(entry => !string.IsNullOrEmpty(entry.bundle)).ToArray();
+            .Where(entry => !string.IsNullOrEmpty(entry.bundle) && !RuntimeBundles.Any(entry.bundle.StartsWith)).ToArray();
         const string path = "Assets/Resources/GachaOfflineCatalog.asset";
         var catalog = AssetDatabase.LoadAssetAtPath<GachaOfflineCatalog>(path);
         if (!catalog) { catalog = ScriptableObject.CreateInstance<GachaOfflineCatalog>(); AssetDatabase.CreateAsset(catalog, path); }

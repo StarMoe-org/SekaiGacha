@@ -25,6 +25,7 @@ namespace SekaiGacha
         public PlayableDirector CurrentDirector { get; private set; }
         public GachaAudio Audio { get; private set; }
         public GachaResources Assets { get; private set; }
+        public GachaAssetBucket Bucket { get; private set; }
         public float MaximumFrameMs { get; private set; }
         public int SlowFrames { get; private set; }
         public event Action PlaybackCompleted;
@@ -34,6 +35,7 @@ namespace SekaiGacha
         readonly List<GameObject> effects = new List<GameObject>();
         readonly List<GameObject> prizeSlots = new List<GameObject>();
         readonly Dictionary<string, Sprite> cards = new Dictionary<string, Sprite>();
+        readonly Dictionary<string, GachaAssetBucket.Card> cardMedia = new Dictionary<string, GachaAssetBucket.Card>();
         bool busy;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -52,14 +54,15 @@ namespace SekaiGacha
             fallbackCamera.GetUniversalAdditionalCameraData().SetRenderer(1);
             fallbackCamera.gameObject.AddComponent<AudioListener>();
             Audio = gameObject.AddComponent<GachaAudio>();
-            Assets = new GachaResources(Application.platform == RuntimePlatform.WebGLPlayer ? Application.persistentDataPath : Path.GetFullPath(Path.Combine(Application.dataPath, "../../Cache")));
+            Assets = new GachaResources();
+            Bucket = new GachaAssetBucket(this);
+            Debug.Log("GACHA_CLIENT " + GachaAssetBucket.UserAgent);
             StartCoroutine(Guard(Initialize()));
         }
         IEnumerator Initialize()
         {
             var catalog = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"].Select(c => (string)c["id"]).ToArray();
             yield return Assets.Initialize();
-            yield return Assets.Load("live_pv/sp/gacha/main", "live_pv/sp/gacha/signal", "effect_asset/gacha_obtain_prize", "gacha/sound/se/se_gacha", "character/label", "live_pv/model/mesh_flare_para/textures/9200");
             Audio.Initialize();
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
             yield return LoadCards(catalog);
@@ -85,16 +88,24 @@ namespace SekaiGacha
             return Instantiate(prefab);
         }
         static int CharacterId(string card) => int.Parse(card.Substring(3, card.IndexOf('_') - 3));
-        IEnumerator LoadCards(IEnumerable<string> results)
+        IEnumerator LoadCards(string[] results)
         {
+            yield return Bucket.Load(results, cardMedia);
             foreach (string id in results.Distinct())
             {
                 if (cards.ContainsKey(id)) continue;
-                yield return Assets.Load("character/member/" + id, "sound/gacha/get_voice/" + id);
-                Audio.Load(Assets, "sound/gacha/get_voice/" + id);
-                var texture = Assets.Get<Texture2D>("character/member/" + id, "card_normal");
-                cards.Add(id, Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f)));
+                var texture = cardMedia[id].Art;
+                cards.Add(id, Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect));
             }
+            // 只保留本次结果用到的卡，避免浏览器里纹理随抽卡次数累积。
+            foreach (string id in cards.Keys.Except(results).ToArray()) ReleaseCard(id);
+        }
+        void ReleaseCard(string id)
+        {
+            if (cards.TryGetValue(id, out var sprite)) Destroy(sprite);
+            if (cardMedia.TryGetValue(id, out var media)) media.Release();
+            cards.Remove(id);
+            cardMedia.Remove(id);
         }
         // 接收上层给出的结果；当前只播放四星演出，不执行账号或真实抽卡请求。
         public void PlayCards(string[] results)
@@ -128,7 +139,7 @@ namespace SekaiGacha
                 SetCameras(main, false);
                 SetCameras(reveal, true);
                 Phase = "揭卡";
-                Audio.PlayVoice(card);
+                Audio.PlayVoice(card, cardMedia[card].Voice);
                 RevealedCount++;
                 Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card);
                 yield return PlayTimeline(reveal, false);
@@ -308,7 +319,7 @@ namespace SekaiGacha
             foreach (var effect in effects) if (effect) foreach (var director in effect.GetComponentsInChildren<PlayableDirector>(true)) director.Stop();
             if (main) Destroy(main);
             foreach (var effect in effects) if (effect) Destroy(effect);
-            Assets?.Dispose();
+            foreach (string id in cards.Keys.ToArray()) ReleaseCard(id);
             if (Instance == this) Instance = null;
         }
     }

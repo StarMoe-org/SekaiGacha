@@ -9,12 +9,16 @@ namespace SekaiGacha
 {
     public sealed class GachaAudio : MonoBehaviour
     {
+        // 音效仍用原版 ACB；获得语音来自资源桶的 mp3，用 Unity 音频播放。
         readonly Dictionary<string, CriAtomExAcb> sheets = new Dictionary<string, CriAtomExAcb>();
-        CriAtomExPlayer se, voice;
-        CriAtomExOutputAnalyzer meter;
+        readonly float[] samples = new float[256];
+        CriAtomExPlayer se;
+        AudioSource voice;
         GCHandle acf;
         GameObject criRoot;
         public int VoiceCount { get; private set; }
+        // 没有获得语音的揭卡次数。
+        public int MissingVoiceCount { get; private set; }
         public float VoicePeak { get; private set; }
         public bool Muted { get; set; }
         public void Initialize()
@@ -30,9 +34,9 @@ namespace SekaiGacha
             acf = GCHandle.Alloc(bytes, GCHandleType.Pinned);
             if (!CriAtomEx.RegisterAcf(acf.AddrOfPinnedObject(), bytes.Length)) throw new InvalidOperationException("音频配置加载失败");
             se = new CriAtomExPlayer();
-            voice = new CriAtomExPlayer();
-            meter = new CriAtomExOutputAnalyzer(new CriAtomExOutputAnalyzer.Config { enableLevelmeter = true });
-            if (!meter.AttachExPlayer(voice)) throw new InvalidOperationException("语音音量检查初始化失败");
+            voice = gameObject.AddComponent<AudioSource>();
+            voice.playOnAwake = false;
+            voice.spatialBlend = 0;
         }
         public void Load(GachaResources assets, string bundle)
         {
@@ -50,23 +54,35 @@ namespace SekaiGacha
             se.SetCue(sheet, cue);
             se.Start();
         }
-        public double PlayVoice(string card)
+        public double PlayVoice(string card, AudioClip clip)
         {
-            string bundle = "sound/gacha/get_voice/" + card;
-            var sheet = sheets[bundle];
-            var cue = sheet.GetCueInfoList().First();
             voice.Stop();
-            voice.SetCue(sheet, cue.id);
-            voice.Start();
+            if (!clip)
+            {
+                MissingVoiceCount++;
+                Debug.Log("GACHA_NO_VOICE " + card);
+                return 0;
+            }
+            voice.clip = clip;
+            voice.Play();
             VoiceCount++;
-            Debug.Log("GACHA_VOICE " + card + " durationMs=" + cue.length);
-            return cue.length / 1000.0;
+            Debug.Log("GACHA_VOICE " + card + " durationMs=" + Mathf.RoundToInt(clip.length * 1000));
+            return clip.length;
         }
-        void Update() { if (meter != null) VoicePeak = Mathf.Max(VoicePeak, meter.GetRms(0)); }
+        void Update()
+        {
+#if !UNITY_WEBGL || UNITY_EDITOR
+            // 仅用于编辑器和桌面验证；WebGL 不支持读取输出采样。
+            if (!voice || !voice.isPlaying) return;
+            voice.GetOutputData(samples, 0);
+            float sum = 0;
+            foreach (float sample in samples) sum += sample * sample;
+            VoicePeak = Mathf.Max(VoicePeak, Mathf.Sqrt(sum / samples.Length));
+#endif
+        }
         void OnDestroy()
         {
-            meter?.Dispose();
-            voice?.Dispose(); se?.Dispose();
+            se?.Dispose();
             foreach (var sheet in sheets.Values) sheet.Dispose();
             if (acf.IsAllocated) { CriAtomEx.UnregisterAcf(); acf.Free(); }
             if (criRoot) Destroy(criRoot);

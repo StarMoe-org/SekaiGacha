@@ -6484,42 +6484,6 @@ MonoBehaviour:
   - bundle: character/label
     name: chr_name_h_9
     asset: {fileID: 21300000, guid: 21d0e1ba74c9045fe818b0c8c95c6a48, type: 3}
-  - bundle: character/member/res001_no004
-    name: card_after_training
-    asset: {fileID: 2800000, guid: 71b1cba6a5e3bf6d2207f9ca2ac56645, type: 3}
-  - bundle: character/member/res001_no004
-    name: card_normal
-    asset: {fileID: 2800000, guid: 4ce762c4204e1348f37f4c2acb7154b2, type: 3}
-  - bundle: character/member/res022_no004
-    name: card_after_training
-    asset: {fileID: 2800000, guid: 84136caef18c44811517b5a3a753bb81, type: 3}
-  - bundle: character/member/res022_no004
-    name: card_normal
-    asset: {fileID: 2800000, guid: 5781f30739c873a5142e59b868e83c18, type: 3}
-  - bundle: character/member/res023_no004
-    name: card_after_training
-    asset: {fileID: 2800000, guid: 9a724f613abbe023307dd7f4105def78, type: 3}
-  - bundle: character/member/res023_no004
-    name: card_normal
-    asset: {fileID: 2800000, guid: 68114ed76739370ac20865c5497f721c, type: 3}
-  - bundle: character/member_small/res001_no004
-    name: card_after_training
-    asset: {fileID: 2800000, guid: 2b1f4ac2e4b129639b71e22f0285a572, type: 3}
-  - bundle: character/member_small/res001_no004
-    name: card_normal
-    asset: {fileID: 2800000, guid: ce8debd76b6d0ed599fd5aee80d6cfde, type: 3}
-  - bundle: character/member_small/res022_no004
-    name: card_after_training
-    asset: {fileID: 2800000, guid: 7697a15dc275d5550d63c55d505f7749, type: 3}
-  - bundle: character/member_small/res022_no004
-    name: card_normal
-    asset: {fileID: 2800000, guid: 00b989ee3511411f9ce3b2401e9f10ba, type: 3}
-  - bundle: character/member_small/res023_no004
-    name: card_after_training
-    asset: {fileID: 2800000, guid: 4e0b6611c96ce46532172f1cda1ddd8d, type: 3}
-  - bundle: character/member_small/res023_no004
-    name: card_normal
-    asset: {fileID: 2800000, guid: 25d47d8ddd97a17ad7691480ce97fc93, type: 3}
   - bundle: effect_asset/gacha_obtain_prize
     name: clip_gacha_card_birthday_01
     asset: {fileID: 7400000, guid: ee8436d7231a47a7e7d59290817a6269, type: 2}
@@ -7936,15 +7900,6 @@ MonoBehaviour:
   - bundle: gacha/sound/se/se_gacha
     name: SE_GACHA.acb
     asset: {fileID: 4900000, guid: cb05bc9149bfb2869101ef1225b8be25, type: 3}
-  - bundle: sound/gacha/get_voice/res001_no004
-    name: res001_no004.acb
-    asset: {fileID: 4900000, guid: bf577effdc3ddfa22b9e9ee7d9d300a9, type: 3}
-  - bundle: sound/gacha/get_voice/res022_no004
-    name: res022_no004.acb
-    asset: {fileID: 4900000, guid: 811d0ad15aac81df23981b110d0fc49b, type: 3}
-  - bundle: sound/gacha/get_voice/res023_no004
-    name: res023_no004.acb
-    asset: {fileID: 4900000, guid: 045d51f1614deb0e96d2f32937979099, type: 3}
   - bundle: unit_background
     name: bg_idol
     asset: {fileID: 2800000, guid: b32a2f6ce7a9542bb909430b0e61ac96, type: 3}
