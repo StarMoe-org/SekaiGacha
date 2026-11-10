@@ -12,8 +12,9 @@ namespace SekaiGacha
     // 与原版 GachaDisplayState 相同：★2 用 member_gacha 的立绘且不播语音，★3 以上用卡面并播语音。
     public sealed class GachaAssetBucket
     {
-        // 两条线是同一份资源：主线失败时换海外线，资源不存在（404）时不再重试。
-        static readonly string[] Hosts = { "https://storage.exmeaning.com", "https://storage.pjsk.moe" };
+        // 两条线是同一份资源，顺序与 Moesekai 主站一致：主线 storage.pjsk.moe（Cloudflare）失败时换备用线
+        // storage.exmeaning.com（EdgeOne），资源不存在（404）时不再重试。
+        static readonly string[] Hosts = { "https://storage.pjsk.moe", "https://storage.exmeaning.com" };
         const string Region = "jp";
         public static string UserAgent => "SekaiGacha/" + Application.version + " (" + Application.platform + "; Unity " + Application.unityVersion + ")";
 
