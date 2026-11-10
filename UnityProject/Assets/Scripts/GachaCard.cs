@@ -12,26 +12,43 @@ namespace SekaiGacha
         Birthday = 5,
     }
 
-    // 一张要揭开的卡：资源名决定卡面、语音和角色，稀有度决定演出。
+    // 一张要揭开的卡：资源名决定卡面、语音和角色，稀有度决定演出，卡名和招募台词显示在揭卡画面上。
     public readonly struct GachaCard
     {
         static readonly Regex IdPattern = new Regex(@"^res\d+_no\d+$");
+        // 主数据里卡名最长 23 字、台词最长 19 字，留出余量。
+        public const int MaxTextLength = 64;
 
         public readonly string Id;
         public readonly GachaRarity Rarity;
+        // 主数据 prefix；★2 卡是团体名。
+        public readonly string Prefix;
+        // 主数据 gachaPhrase；原版只在 ★3 以上显示。
+        public readonly string Phrase;
 
-        public GachaCard(string id, GachaRarity rarity)
+        public GachaCard(string id, GachaRarity rarity, string prefix = "", string phrase = "")
         {
             if (!IsValidId(id)) throw new ArgumentException("无效的卡牌资源名 " + id, nameof(id));
             if (!Enum.IsDefined(typeof(GachaRarity), rarity)) throw new ArgumentException("无效的稀有度 " + rarity, nameof(rarity));
+            if (!IsValidText(prefix)) throw new ArgumentException("无效的卡名", nameof(prefix));
+            if (!IsValidText(phrase)) throw new ArgumentException("无效的招募台词", nameof(phrase));
             Id = id;
             Rarity = rarity;
+            Prefix = prefix;
+            Phrase = phrase;
         }
 
         public int CharacterId => int.Parse(Id.Substring(3, Id.IndexOf('_') - 3));
         // 原版按 (rarity & ~1) == 4 判断，四星与生日卡同属最高档。
         public static bool IsTopRarity(GachaRarity rarity) => rarity == GachaRarity.Rarity4 || rarity == GachaRarity.Birthday;
         public static bool IsValidId(string id) => id != null && IdPattern.IsMatch(id);
+        // 单行纯文本，不含控制字符。
+        public static bool IsValidText(string text)
+        {
+            if (text == null || text.Length > MaxTextLength) return false;
+            foreach (char c in text) if (char.IsControl(c)) return false;
+            return true;
+        }
 
         // 接受主数据的 cardRarityType 写法：rarity_2、rarity_3、rarity_4、rarity_birthday。
         public static bool TryParseRarity(string value, out GachaRarity rarity)

@@ -69,8 +69,9 @@ namespace SekaiGacha
             }
         }
 
-        // cards 每项为 { id: "res001_no004", rarity: "rarity_4" }（rarity 取主数据 cardRarityType）；
-        // 只给资源名字符串的旧写法不知道稀有度，按 ★4 演出。
+        // cards 每项为 { id: "res001_no004", rarity: "rarity_4", prefix?, phrase? }：rarity 取主数据 cardRarityType，
+        // 可选的 prefix、phrase 取主数据 prefix（卡名）和 gachaPhrase（招募台词）。
+        // 只给资源名字符串的旧写法不知道稀有度，按 ★4 演出，也不显示文字。
         static bool TryReadCards(JToken token, out GachaCard[] cards, out string problem)
         {
             cards = null;
@@ -79,7 +80,7 @@ namespace SekaiGacha
             var read = new GachaCard[array.Count];
             for (int i = 0; i < array.Count; i++)
             {
-                string id;
+                string id, prefix = "", phrase = "";
                 GachaRarity rarity = GachaRarity.Rarity4;
                 if (array[i].Type == JTokenType.String) id = (string)array[i];
                 else if (array[i] is JObject item && item["id"]?.Type == JTokenType.String)
@@ -90,13 +91,25 @@ namespace SekaiGacha
                         problem = "第 " + (i + 1) + " 张卡的稀有度无效";
                         return false;
                     }
+                    if (!TryReadText(item["prefix"], out prefix)) { problem = "第 " + (i + 1) + " 张卡的卡名无效"; return false; }
+                    if (!TryReadText(item["phrase"], out phrase)) { problem = "第 " + (i + 1) + " 张卡的招募台词无效"; return false; }
                 }
                 else { problem = "第 " + (i + 1) + " 张卡格式无效"; return false; }
                 if (!GachaCard.IsValidId(id)) { problem = "第 " + (i + 1) + " 张卡的资源名无效"; return false; }
-                read[i] = new GachaCard(id, rarity);
+                read[i] = new GachaCard(id, rarity, prefix, phrase);
             }
             cards = read;
             return true;
+        }
+
+        // 缺省或 null 视为空；否则须是不超长、不含控制字符的字符串。
+        static bool TryReadText(JToken token, out string text)
+        {
+            text = "";
+            if (token == null || token.Type == JTokenType.Null) return true;
+            if (token.Type != JTokenType.String) return false;
+            text = (string)token;
+            return GachaCard.IsValidText(text);
         }
 
         void Play(GachaCard[] cards)

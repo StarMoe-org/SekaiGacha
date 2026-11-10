@@ -21,7 +21,9 @@
     // 宿主 → 本页（只接受直接父窗口发来的消息；未就绪前收到的 play 会在就绪后执行）：
     //   { type: "sekai-gacha:play", cards: [{ id: "res001_no004", rarity: "rarity_4" }, ...] }
     //       1 至 10 张卡，按顺序揭卡。rarity 取主数据 cardRarityType（rarity_2 / rarity_3 / rarity_4 / rarity_birthday），
-    //       决定开场预告和揭卡演出；只给资源名字符串（如 "res001_no004"）时不知道稀有度，按 ★4 演出
+    //       决定开场预告和揭卡演出；只给资源名字符串（如 "res001_no004"）时不知道稀有度，按 ★4 演出。
+    //       可选 prefix、phrase 取主数据 prefix（卡名）和 gachaPhrase（招募台词），按纯文本显示，各至多 64 字；
+    //       ★2 只显示卡名
     //   { type: "sekai-gacha:skip" }                                 跳到最后一张卡的结束画面
     //   { type: "sekai-gacha:mute", muted: true }                    静音或恢复
     //

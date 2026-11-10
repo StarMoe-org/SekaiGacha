@@ -8,6 +8,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Playables;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.TextCore.LowLevel;
 using UnityEngine.Timeline;
 
 namespace SekaiGacha
@@ -33,6 +34,8 @@ namespace SekaiGacha
         public int SlowFrames { get; private set; }
         public event Action PlaybackCompleted;
         TMP_FontAsset tmpFont;
+        // 原版 ScreenLayerGachaAnimation.LoadedMaterial：卡名用 Gacha，招募台词用 Gacha2。
+        Material unitNameMaterial, phraseMaterial;
         Camera fallbackCamera;
         GameObject main, reveal;
         readonly List<GameObject> effects = new List<GameObject>();
@@ -59,7 +62,9 @@ namespace SekaiGacha
             Application.targetFrameRate = 60;
 #endif
             QualitySettings.vSyncCount = 0;
-            tmpFont = TMP_FontAsset.CreateFontAsset(Resources.Load<Font>("GachaFont"));
+            // GachaFont 即原版 FOT-RodinNTLG Pro EB；包内的 SDF_Base 只是占位，按原版生成参数（35pt、padding 5）
+            // 动态生成图集，原版材质的描边和粗细才能原样使用。
+            tmpFont = TMP_FontAsset.CreateFontAsset(Resources.Load<Font>("GachaFont"), 35, 5, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
             fallbackCamera = new GameObject("Loading Camera").AddComponent<Camera>();
             fallbackCamera.clearFlags = CameraClearFlags.SolidColor;
             fallbackCamera.backgroundColor = Color.black;
@@ -75,8 +80,11 @@ namespace SekaiGacha
         }
         IEnumerator Initialize()
         {
-            var catalog = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"].Select(c => new GachaCard((string)c["id"], (GachaRarity)(int)c["rarity"])).ToArray();
+            var catalog = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"]
+                .Select(c => new GachaCard((string)c["id"], (GachaRarity)(int)c["rarity"], (string)c["prefix"] ?? "", (string)c["phrase"] ?? "")).ToArray();
             yield return Assets.Initialize();
+            unitNameMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha");
+            phraseMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha2");
             Audio.Initialize();
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
             yield return LoadCards(catalog);
@@ -425,8 +433,32 @@ namespace SekaiGacha
             var label = root.transform.Find("root/member_name").GetComponent<SpriteRenderer>();
             label.sprite = Assets.Get<Sprite>("character/label", "chr_name_h_" + card.CharacterId);
             root.transform.Find("root/new").GetComponent<SpriteRenderer>().enabled = true;
+            // 原版 SetupCharacter 在 unit_name 显示卡名，SetupVoice（★3 以上）在 MainCamera/Text 显示招募台词。
+            // prefab 里的文字是占位，先全部清空。
             foreach (var text in root.GetComponentsInChildren<TMP_Text>(true)) { text.font = tmpFont; text.text = ""; }
+            SetText(root.transform.Find("root/unit_name"), unitNameMaterial, card.Prefix);
+            if (card.Rarity != GachaRarity.Rarity2) SetText(root.transform.Find("root/MainCamera/Text"), phraseMaterial, card.Phrase);
             SetupCameras(root);
+        }
+        // 文字来自宿主，按纯文本显示。
+        static void SetText(Transform node, Material material, string value)
+        {
+            var text = node.GetComponent<TMP_Text>();
+            text.fontSharedMaterial = material;
+            text.richText = false;
+            text.text = value;
+        }
+        // 复制原版材质，换成动态图集；着色器在当前平台不可用时改用字体的默认着色器。
+        Material TextMaterial(string name)
+        {
+            var material = new Material(Assets.Get<Material>("effect_asset/gacha_obtain_prize", name)) { name = name + " (Dynamic)" };
+            if (!material.shader || !material.shader.isSupported) material.shader = tmpFont.material.shader;
+            material.SetTexture(ShaderUtilities.ID_MainTex, tmpFont.atlasTexture);
+            material.SetFloat(ShaderUtilities.ID_TextureWidth, tmpFont.atlasWidth);
+            material.SetFloat(ShaderUtilities.ID_TextureHeight, tmpFont.atlasHeight);
+            material.SetFloat(ShaderUtilities.ID_GradientScale, tmpFont.atlasPadding + 1);
+            Debug.Log("GACHA_TEXT_MATERIAL " + name + " shader=" + material.shader.name);
+            return material;
         }
         static readonly string[] RevealEffects = { "fx_gacha_card_r2_01", "fx_gacha_card_r3_01", "fx_gacha_card_r3_afterTraining_01", "fx_gacha_card_r4_01", "fx_gacha_card_r4_afterTraining_01", "fx_gacha_card_birthday_01" };
         static readonly string[] SlotEffects = { "eff_9200_gatya_r02", "eff_9200_gatya_r03", "eff_9200_gatya_r04" };
