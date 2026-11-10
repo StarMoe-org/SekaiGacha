@@ -9,6 +9,7 @@ using UnityEngine.Networking;
 namespace SekaiGacha
 {
     // 单张卡牌的卡面和获得语音运行时从 Moesekai 资源桶下载；演出资源已打包进工程，不访问官方服务器。
+    // 与原版 GachaDisplayState 相同：★2 用 member_gacha 的立绘且不播语音，★3 以上用卡面并播语音。
     public sealed class GachaAssetBucket
     {
         // 两条线是同一份资源：主线失败时换海外线，资源不存在（404）时不再重试。
@@ -19,8 +20,10 @@ namespace SekaiGacha
         public sealed class Card
         {
             public Texture2D Art;
-            // 没有获得语音的卡（全部 ★1/★2 及少数 ★3/★4）为 null。
+            // ★2 和没有获得语音的少数 ★3/★4 为 null。
             public AudioClip Voice;
+            // 只有特训后卡面（初始即特训）的卡，原版改用 afterTraining 演出。
+            public bool AfterTrainingOnly;
             public void Release()
             {
                 if (Art) UnityEngine.Object.Destroy(Art);
@@ -32,9 +35,9 @@ namespace SekaiGacha
         public GachaAssetBucket(MonoBehaviour runner) { this.runner = runner; }
 
         // 并行下载 into 中还没有的卡；卡面缺失视为失败，语音缺失按无语音处理。
-        public IEnumerator Load(IEnumerable<string> ids, IDictionary<string, Card> into)
+        public IEnumerator Load(IEnumerable<GachaCard> cards, IDictionary<string, Card> into)
         {
-            var jobs = ids.Distinct().Where(id => !into.ContainsKey(id)).Select(id => new Job(id)).ToArray();
+            var jobs = cards.GroupBy(card => card.Id).Select(group => group.First()).Where(card => !into.ContainsKey(card.Id)).Select(card => new Job(card)).ToArray();
             foreach (var job in jobs) runner.StartCoroutine(job.Run());
             while (jobs.Any(job => !job.Done)) yield return null;
             var failed = jobs.FirstOrDefault(job => job.Error != null);
@@ -49,10 +52,11 @@ namespace SekaiGacha
         sealed class Job
         {
             public readonly string Id;
+            readonly GachaRarity rarity;
             public readonly Card Result = new Card();
             public bool Done;
             public string Error;
-            public Job(string id) { Id = id; }
+            public Job(GachaCard card) { Id = card.Id; rarity = card.Rarity; }
 
             public IEnumerator Run()
             {
@@ -61,13 +65,17 @@ namespace SekaiGacha
                 {
                     long status = 0;
                     string message = null;
-                    // 初始即特训的卡只有特训后卡面。
-                    foreach (string name in new[] { "card_normal", "card_after_training" })
+                    // ★2 的演出用 member_gacha 立绘；初始即特训的卡只有特训后卡面。
+                    string[] arts = rarity == GachaRarity.Rarity2
+                        ? new[] { "character/member_gacha/" + Id + "/normal.png" }
+                        : new[] { "character/member/" + Id + "/card_normal.png", "character/member/" + Id + "/card_after_training.png" };
+                    for (int i = 0; i < arts.Length; i++)
                     {
-                        yield return Fetch("character/member/" + Id + "/" + name + ".png",
+                        yield return Fetch(arts[i],
                             url => UnityWebRequestTexture.GetTexture(url, true),
                             request => Result.Art = DownloadHandlerTexture.GetContent(request),
                             (code, error) => { status = code; message = error; });
+                        Result.AfterTrainingOnly = i == 1;
                         if (Result.Art || status != 404) break;
                     }
                     if (!Result.Art)
@@ -76,6 +84,12 @@ namespace SekaiGacha
                         yield break;
                     }
                     Result.Art.wrapMode = TextureWrapMode.Clamp;
+                    // 原版 ★2 不播获得语音。
+                    if (rarity == GachaRarity.Rarity2)
+                    {
+                        Error = null;
+                        yield break;
+                    }
                     yield return Fetch("sound/gacha/get_voice/" + Id + "/" + Id + ".mp3",
                         url => UnityWebRequestMultimedia.GetAudioClip(url, AudioType.MPEG),
                         request => Result.Voice = DownloadHandlerAudioClip.GetContent(request),

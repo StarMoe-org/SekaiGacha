@@ -25,7 +25,7 @@ namespace SekaiGacha
 #endif
         const string Prefix = "sekai-gacha:";
         GachaApp app;
-        string[] pending;
+        GachaCard[] pending;
         string reported;
 
         void Awake() { app = GetComponent<GachaApp>(); }
@@ -52,7 +52,7 @@ namespace SekaiGacha
             switch ((string)message["type"])
             {
                 case Prefix + "play":
-                    string[] cards = (message["cards"] as JArray)?.Select(token => token.Type == JTokenType.String ? (string)token : null).ToArray();
+                    if (!TryReadCards(message["cards"], out var cards, out string problem)) { Reject("invalid_cards", problem); break; }
                     // 引擎还在启动时先记下，就绪后再播。
                     if (!app.Ready && app.Phase != "失败") pending = cards;
                     else Play(cards);
@@ -69,7 +69,37 @@ namespace SekaiGacha
             }
         }
 
-        void Play(string[] cards)
+        // cards 每项为 { id: "res001_no004", rarity: "rarity_4" }（rarity 取主数据 cardRarityType）；
+        // 只给资源名字符串的旧写法不知道稀有度，按 ★4 演出。
+        static bool TryReadCards(JToken token, out GachaCard[] cards, out string problem)
+        {
+            cards = null;
+            problem = "需要 1 至 10 张卡";
+            if (!(token is JArray array) || array.Count < 1 || array.Count > 10) return false;
+            var read = new GachaCard[array.Count];
+            for (int i = 0; i < array.Count; i++)
+            {
+                string id;
+                GachaRarity rarity = GachaRarity.Rarity4;
+                if (array[i].Type == JTokenType.String) id = (string)array[i];
+                else if (array[i] is JObject item && item["id"]?.Type == JTokenType.String)
+                {
+                    id = (string)item["id"];
+                    if (item["rarity"]?.Type != JTokenType.String || !GachaCard.TryParseRarity((string)item["rarity"], out rarity))
+                    {
+                        problem = "第 " + (i + 1) + " 张卡的稀有度无效";
+                        return false;
+                    }
+                }
+                else { problem = "第 " + (i + 1) + " 张卡格式无效"; return false; }
+                if (!GachaCard.IsValidId(id)) { problem = "第 " + (i + 1) + " 张卡的资源名无效"; return false; }
+                read[i] = new GachaCard(id, rarity);
+            }
+            cards = read;
+            return true;
+        }
+
+        void Play(GachaCard[] cards)
         {
             if (!app.CanPlay) { Reject("busy", "演出正在进行"); return; }
             try { app.PlayCards(cards); }
