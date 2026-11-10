@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>{{{ PRODUCT_NAME }}}</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+    /* 演出按 16:9 制作，在任意尺寸的 iframe 内居中并留黑边。 */
+    #unity-canvas {
+      position: absolute; inset: 0; margin: auto; display: block; outline: none; background: #000;
+      width: min(100vw, calc(100vh * 16 / 9)); height: min(100vh, calc(100vw * 9 / 16));
+    }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <script>
+    // 嵌入协议（v1）。宿主用 <iframe allow="autoplay; fullscreen"> 嵌入本页，消息都是 { type: "sekai-gacha:*", ... } 对象。
+    //
+    // 宿主 → 本页（只接受直接父窗口发来的消息；未就绪前收到的 play 会在就绪后执行）：
+    //   { type: "sekai-gacha:play", cards: ["res001_no004", ...] }  1 至 10 张卡牌资源名，按顺序揭卡
+    //   { type: "sekai-gacha:skip" }                                 跳到最后一张卡的结束画面
+    //   { type: "sekai-gacha:mute", muted: true }                    静音或恢复
+    //
+    // 本页 → 宿主（不含敏感内容，targetOrigin 为 "*"）：
+    //   { type: "sekai-gacha:loader", v: 1, progress: 0..1 }         引擎文件下载进度
+    //   { type: "sekai-gacha:state", v: 1, phase, revealed, total, card?, client?, error? }
+    //     phase: booting | ready | loading（下载卡面和语音）| intro（开场）| reveal（揭卡，card 为当前卡）| complete | error
+    //   { type: "sekai-gacha:error", v: 1, code, message }           单条指令被拒绝：busy | invalid_cards | invalid_message
+    //
+    // 浏览器只在用户与页面交互后允许播放声音；宿主需在 iframe 上委托 autoplay，或让用户先点击 iframe。
+    (function () {
+      var PREFIX = "sekai-gacha:";
+      var embedded = window.parent !== window;
+      window.SekaiGachaHost = {
+        inbox: [],
+        post: function (message) {
+          if (embedded) window.parent.postMessage(message, "*");
+        }
+      };
+      window.addEventListener("message", function (event) {
+        if (event.source !== window.parent || !event.data || typeof event.data.type !== "string" || event.data.type.indexOf(PREFIX) !== 0) return;
+        window.SekaiGachaHost.inbox.push(JSON.stringify(event.data));
+      });
+      function report(type, payload) {
+        var message = { type: PREFIX + type, v: 1 };
+        for (var key in payload) message[key] = payload[key];
+        window.SekaiGachaHost.post(message);
+      }
+
+      var buildUrl = "Build";
+      var config = {
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+        workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if MEMORY_FILENAME
+        memoryUrl: buildUrl + "/{{{ MEMORY_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        // 高分屏上限 2 倍，避免手机按 3 倍分辨率渲染。
+        devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+        showBanner: function (message, type) {
+          if (type === "error") report("state", { phase: "error", revealed: 0, total: 0, error: String(message) });
+          else console.warn(message);
+        }
+      };
+
+      var script = document.createElement("script");
+      script.src = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      script.onload = function () {
+        createUnityInstance(document.querySelector("#unity-canvas"), config, function (progress) {
+          report("loader", { progress: progress });
+        }).catch(function (error) {
+          report("state", { phase: "error", revealed: 0, total: 0, error: String(error) });
+        });
+      };
+      script.onerror = function () {
+        report("state", { phase: "error", revealed: 0, total: 0, error: "loader_unavailable" });
+      };
+      document.body.appendChild(script);
+    })();
+  </script>
+</body>
+</html>

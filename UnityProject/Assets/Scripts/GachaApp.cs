@@ -19,6 +19,9 @@ namespace SekaiGacha
         public static GachaApp Instance { get; private set; }
         public string Phase { get; private set; } = "加载";
         public string Error { get; private set; }
+        // 初始化完成后为 true；之后可多次播放，单次播放失败也可以重试。
+        public bool Ready { get; private set; }
+        public bool CanPlay => Ready && !busy;
         public int RevealedCount { get; private set; }
         public int DrawCount { get; private set; }
         public string[] CurrentResults { get; private set; }
@@ -36,7 +39,7 @@ namespace SekaiGacha
         readonly List<GameObject> prizeSlots = new List<GameObject>();
         readonly Dictionary<string, Sprite> cards = new Dictionary<string, Sprite>();
         readonly Dictionary<string, GachaAssetBucket.Card> cardMedia = new Dictionary<string, GachaAssetBucket.Card>();
-        bool busy;
+        bool busy, skipRequested;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (!FindObjectOfType<GachaApp>()) new GameObject("SekaiGacha").AddComponent<GachaApp>(); }
@@ -44,7 +47,12 @@ namespace SekaiGacha
         {
             Instance = this;
             Application.runInBackground = true;
+#if UNITY_WEBGL && !UNITY_EDITOR
+            // 浏览器按 requestAnimationFrame 驱动；设定帧率会改用定时器，容易卡顿。
+            Application.targetFrameRate = -1;
+#else
             Application.targetFrameRate = 60;
+#endif
             QualitySettings.vSyncCount = 0;
             tmpFont = TMP_FontAsset.CreateFontAsset(Resources.Load<Font>("GachaFont"));
             fallbackCamera = new GameObject("Loading Camera").AddComponent<Camera>();
@@ -54,6 +62,7 @@ namespace SekaiGacha
             fallbackCamera.GetUniversalAdditionalCameraData().SetRenderer(1);
             fallbackCamera.gameObject.AddComponent<AudioListener>();
             Audio = gameObject.AddComponent<GachaAudio>();
+            gameObject.AddComponent<GachaEmbed>();
             Assets = new GachaResources();
             Bucket = new GachaAssetBucket(this);
             Debug.Log("GACHA_CLIENT " + GachaAssetBucket.UserAgent);
@@ -78,8 +87,10 @@ namespace SekaiGacha
             yield return null;
             yield return new WaitForEndOfFrame();
             Phase = "就绪";
+            Ready = true;
             Debug.Log("GACHA_READY");
-            PlayCards(Enumerable.Range(0, 10).Select(_ => catalog[UnityEngine.Random.Range(0, catalog.Length)]).ToArray());
+            // 嵌入网页时等宿主指定卡牌，否则自动播放演示十连。
+            if (!GachaEmbed.Embedded) PlayCards(Enumerable.Range(0, 10).Select(_ => catalog[UnityEngine.Random.Range(0, catalog.Length)]).ToArray());
         }
         static GameObject InstantiateForSetup(GameObject prefab)
         {
@@ -110,19 +121,21 @@ namespace SekaiGacha
         // 接收上层给出的结果；当前只播放四星演出，不执行账号或真实抽卡请求。
         public void PlayCards(string[] results)
         {
-            if (busy || (Phase != "就绪" && Phase != "完成")) throw new InvalidOperationException("演出正在进行");
+            if (!CanPlay) throw new InvalidOperationException("演出正在进行");
             if (results == null || results.Length < 1 || results.Length > 10 || results.Any(id => !System.Text.RegularExpressions.Regex.IsMatch(id ?? "", @"^res\d+_no\d+$")))
                 throw new ArgumentException("需要 1 至 10 个有效卡牌资源名", nameof(results));
             CurrentResults = (string[])results.Clone();
+            Error = null;
+            skipRequested = false;
             busy = true;
             StartCoroutine(Guard(Play()));
         }
         IEnumerator Play()
         {
-            Phase = "加载";
-            yield return LoadCards(CurrentResults);
             DrawCount = CurrentResults.Length;
             RevealedCount = 0;
+            Phase = "加载";
+            yield return LoadCards(CurrentResults);
             MaximumFrameMs = 0;
             SlowFrames = 0;
             for (int i = 0; i < prizeSlots.Count; i++) prizeSlots[i].SetActive(i < DrawCount);
@@ -131,10 +144,13 @@ namespace SekaiGacha
             main.SetActive(true);
             SetCameras(main, true);
             Phase = "3D演出";
-            yield return PlayTimeline(main, true);
+            // 下载卡牌期间已请求跳过时不再启动开场。
+            if (!skipRequested) yield return PlayTimeline(main, true);
+            if (skipRequested) main.transform.Find("Timeline").GetComponent<PlayableDirector>().Stop();
             main.SetActive(false);
             foreach (string card in CurrentResults)
             {
+                if (skipRequested) break;
                 SetupReveal(reveal, cards[card], CharacterId(card));
                 SetCameras(main, false);
                 SetCameras(reveal, true);
@@ -144,10 +160,25 @@ namespace SekaiGacha
                 Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card);
                 yield return PlayTimeline(reveal, false);
             }
+            if (skipRequested)
+            {
+                // 跳过：直接停在最后一张卡的末尾展示段。
+                Audio.Stop();
+                string last = CurrentResults[CurrentResults.Length - 1];
+                SetupReveal(reveal, cards[last], CharacterId(last));
+                SetCameras(main, false);
+                SetCameras(reveal, true);
+                CurrentDirector = reveal.GetComponent<PlayableDirector>();
+                CurrentDirector.extrapolationMode = DirectorWrapMode.None;
+                CurrentDirector.Play();
+                RevealedCount = DrawCount;
+                Debug.Log("GACHA_SKIPPED");
+            }
             // 无结算界面时停留在原版点击跳转使用的末尾展示段。
             CurrentDirector.time = Math.Max(0, CurrentDirector.duration - CardEndWaitSeconds);
             CurrentDirector.Evaluate();
             CurrentDirector.Pause();
+            if (skipRequested) Audio.Stop();
             Phase = "完成";
             busy = false;
             Debug.Log("GACHA_COMPLETE count=" + DrawCount + " voices=" + Audio.VoiceCount + " peak=" + Audio.VoicePeak + " maximumFrameMs=" + MaximumFrameMs + " framesOver100ms=" + SlowFrames);
@@ -177,6 +208,7 @@ namespace SekaiGacha
                 {
                     Error = error.ToString();
                     Phase = "失败";
+                    busy = false;
                     Debug.LogException(error);
                     yield break;
                 }
@@ -289,13 +321,14 @@ namespace SekaiGacha
             if (intro)
             {
                 var loop = ((TimelineAsset)director.playableAsset).GetOutputTracks().OfType<CP.Timeline.LoopTrack>().Single().GetClips().Single();
-                while (director.time <= loop.start) yield return null;
+                while (director.time <= loop.start && !skipRequested) yield return null;
+                if (skipRequested) yield break;
                 // 自动点击代替等待 UI；原 LoopBehaviour 负责调整衔接。
                 director.GetComponent<CP.Timeline.LoopWaitTimeline>().Trigger = true;
                 Audio.PlaySe("SE_GACHA_TAP_3RD_ANV");
                 var state = new GachaSpawnPlayback(root);
                 bool next = false;
-                while (!next)
+                while (!next && !skipRequested)
                 {
                     state.Execute(() => next = true, Audio.PlaySe);
                     yield return null;
@@ -304,9 +337,11 @@ namespace SekaiGacha
             else
             {
                 // 源自 Cpp2CS GachaDisplayState.Execute。
-                while (director.state == PlayState.Playing) yield return null;
+                while (director.state == PlayState.Playing && !skipRequested) yield return null;
             }
         }
+        // 播放中（含下载卡牌时）请求跳过，演出在下一帧停到结束画面。
+        public void Skip() { if (busy) skipRequested = true; }
         static void SetCameras(GameObject root, bool enabled)
         {
             foreach (var post in root.GetComponentsInChildren<Sekai.Core.Graphics.PostEffectV2>(true)) post.enabled = enabled;

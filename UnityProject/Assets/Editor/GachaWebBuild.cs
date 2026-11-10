@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using SekaiGacha;
 using UnityEditor;
 using UnityEditor.Build.Reporting;
@@ -32,7 +33,13 @@ public static class GachaWebBuild
     }
 
     [MenuItem("SekaiGacha/Build Offline WebGL")]
-    public static void Build()
+    public static void Build() => Build(true, "../Build/WebGL");
+
+    // 供 Moesekai 嵌入的发布版：非 Development，体积更小。
+    [MenuItem("SekaiGacha/Build Moesekai WebGL")]
+    public static void BuildRelease() => Build(false, "../Build/Moesekai");
+
+    static void Build(bool development, string output)
     {
         PrepareCatalog();
         GachaBuild.Configure();
@@ -45,28 +52,32 @@ public static class GachaWebBuild
             plugin.SaveAndReimport();
         }
         PlayerSettings.SetManagedStrippingLevel(BuildTargetGroup.WebGL, ManagedStrippingLevel.Minimal);
+        // 保持不压缩，构建后才能修补 framework.js；压缩交给托管方按 Content-Encoding 处理。
         PlayerSettings.WebGL.compressionFormat = WebGLCompressionFormat.Disabled;
+        // 嵌入用模板：画布铺满并保持 16:9，负责与宿主页面通信。
+        PlayerSettings.WebGL.template = "PROJECT:SekaiGacha";
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions {
             scenes = new[] { "Assets/Scenes/Gacha.unity" },
             target = BuildTarget.WebGL,
-            locationPathName = "../Build/WebGL",
-            options = BuildOptions.Development
+            locationPathName = output,
+            options = development ? BuildOptions.Development : BuildOptions.None
         });
-        Debug.Log("GACHA_WEB_BUILD " + report.summary.result + " errors=" + report.summary.totalErrors);
+        Debug.Log("GACHA_WEB_BUILD " + report.summary.result + " errors=" + report.summary.totalErrors + " output=" + output);
         if (report.summary.result != BuildResult.Succeeded) throw new Exception("WebGL 构建失败");
-        // Unity 2022 WebGL 预处理器的嵌套 else 必须遵守父分支是否启用。
-        const string framework = "../Build/WebGL/Build/WebGL.framework.js";
+        PatchFramework(output + "/Build/" + System.IO.Path.GetFileName(output) + ".framework.js");
+    }
+
+    // Unity 2022 WebGL 预处理器的嵌套 else 必须遵守父分支是否启用，并跳过 #line。
+    // 发布版的 framework.js 会被压缩改名，按结构匹配而不是按原文。
+    static void PatchFramework(string framework)
+    {
         string source = System.IO.File.ReadAllText(framework);
-        const string before = "stack[stack.length-1] = 1-stack[stack.length-1]";
-        if (!source.Contains(before) && !source.Contains("(1-stack[stack.length-1]) * stack[stack.length-2]")) throw new Exception("WebGL 预处理器结构已变化");
-        source = source.Replace(before, "stack[stack.length-1] = (1-stack[stack.length-1]) * stack[stack.length-2]")
-            .Replace("directive != 'extension')", "directive != 'extension' && directive != 'line')");
+        var elseToggle = new Regex(@"(\w+)\[\1\.length-1\]\s*=\s*1-\1\[\1\.length-1\]");
+        var extensionOnly = new Regex(@"(\w+)\s*!=\s*(['""])extension\2\)");
+        if (elseToggle.Matches(source).Count != 1 || extensionOnly.Matches(source).Count != 1) throw new Exception("WebGL 预处理器结构已变化");
+        source = elseToggle.Replace(source, "$1[$1.length-1]=(1-$1[$1.length-1])*$1[$1.length-2]");
+        source = extensionOnly.Replace(source, "$1!=$2extension$2&&$1!=$2line$2)");
         System.IO.File.WriteAllText(framework, source);
-        const string page = "../Build/WebGL/index.html";
-        string html = System.IO.File.ReadAllText(page);
-        const string viewportStyle = "<style>#unity-canvas{width:min(100vw,calc((100vh - 38px)*16/9))!important;height:auto!important;aspect-ratio:16/9}#unity-container{width:max-content;max-width:100vw}body{margin:0;overflow:hidden}</style>";
-        if (!html.Contains(viewportStyle)) System.IO.File.WriteAllText(page, html.Replace("</head>", viewportStyle + "</head>"));
-
-
+        Debug.Log("GACHA_FRAMEWORK_PATCHED " + framework);
     }
 }

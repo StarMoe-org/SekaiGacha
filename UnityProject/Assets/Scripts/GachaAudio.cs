@@ -20,7 +20,18 @@ namespace SekaiGacha
         // 没有获得语音的揭卡次数。
         public int MissingVoiceCount { get; private set; }
         public float VoicePeak { get; private set; }
-        public bool Muted { get; set; }
+        bool muted;
+        // 宿主静音：音效不再触发，语音静音。
+        public bool Muted
+        {
+            get => muted;
+            set
+            {
+                muted = value;
+                if (voice) voice.mute = value;
+                if (value) se?.Stop();
+            }
+        }
         public void Initialize()
         {
             criRoot = new GameObject("CRI Audio");
@@ -37,6 +48,7 @@ namespace SekaiGacha
             voice = gameObject.AddComponent<AudioSource>();
             voice.playOnAwake = false;
             voice.spatialBlend = 0;
+            voice.mute = muted;
         }
         public void Load(GachaResources assets, string bundle)
         {
@@ -45,6 +57,11 @@ namespace SekaiGacha
             var sheet = CriAtomExAcb.LoadAcbData(acb.bytes, null, null);
             if (sheet == null) throw new InvalidOperationException("音频资源加载失败 " + bundle);
             sheets.Add(bundle, sheet);
+        }
+        public void Stop()
+        {
+            se?.Stop();
+            if (voice) voice.Stop();
         }
         public void PlaySe(string cue)
         {
