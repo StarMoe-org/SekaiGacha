@@ -60,7 +60,8 @@ namespace SekaiGacha
                 if (fields.Length != 3) throw new InvalidDataException("CDN 签名不完整");
                 cookie = string.Join("; ", fields.Select(m => m.Groups[1].Value + "=" + m.Groups[2].Value));
             }
-            string manifest = Path.Combine(root, "manifest.json");
+            // 清单按资源版本缓存：更新 ResourceVersion.json 后自动重新下载。
+            string manifest = Path.Combine(root, "manifest-" + version["assetVersion"] + "-" + version["assetHash"] + ".json");
             if (!File.Exists(manifest))
             {
                 string url = "https://" + version["host"] + "-assetbundle-info.sekai.colorfulpalette.org/api/version/" + version["assetVersion"] + "/" + version["assetHash"] + "/os/android";
@@ -112,7 +113,9 @@ namespace SekaiGacha
             {
                 if (loaded.ContainsKey(name)) continue;
                 Status = "加载资源… " + name;
-                string file = Path.Combine(root, (string)bundles[name]["cacheFileName"]);
+                // cacheFileName 不随内容变化，附加内容 hash，避免版本更新后读到旧资源包。
+                string hash = (string)bundles[name]["hash"];
+                string file = Path.Combine(root, (string)bundles[name]["cacheFileName"] + (string.IsNullOrEmpty(hash) ? "" : "_" + hash));
                 if (!File.Exists(file))
                 {
                     using (var request = Request(AssetBase + name, "GET"))
@@ -156,6 +159,7 @@ namespace SekaiGacha
         public T[] All<T>(string bundle) where T : UnityEngine.Object => offline ? offline.entries.Where(e => e.bundle == bundle).Select(e => e.asset).OfType<T>().Distinct().ToArray() : loaded[bundle].LoadAllAssets<T>();
         // 离线（WebGL）时只含预先打包的资源。
         public bool IsOffline => offline;
+        public string AssetVersion => (string)version?["assetVersion"];
         public bool Has(string bundle) => offline ? offline.entries.Any(e => e.bundle == bundle) : bundles?[bundle] != null;
         void Rebind(GameObject prefab)
         {

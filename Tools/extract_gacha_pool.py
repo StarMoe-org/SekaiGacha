@@ -2,7 +2,7 @@
 """从 master 数据提取单个卡池，生成 Unity 读取的 GachaPool.json。
 
 master 数据来自 Team-Haruki/haruki-sekai-master（与 Moesekai 相同的数据源）：
-    python3 Tools/extract_gacha_pool.py --fetch            # 下载 gachas.json / cards.json 到 Cache/master
+    python3 Tools/extract_gacha_pool.py --fetch            # 下载 gachas.json / cards.json 到 Cache/master，并同步资源版本
     python3 Tools/extract_gacha_pool.py --list             # 列出最近的卡池
     python3 Tools/extract_gacha_pool.py --gacha-id 4054    # 写入 UnityProject/Assets/Resources/GachaPool.json
 
@@ -12,13 +12,17 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_MASTER = os.path.join(ROOT, "Cache", "master")
 DEFAULT_OUT = os.path.join(ROOT, "UnityProject", "Assets", "Resources", "GachaPool.json")
+RESOURCE_VERSION = os.path.join(ROOT, "UnityProject", "Assets", "Resources", "ResourceVersion.json")
+GACHA_RESOURCES = os.path.join(ROOT, "UnityProject", "Assets", "Scripts", "GachaResources.cs")
 MASTER_URL = "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/master/"
+VERSION_URL = "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/versions/current_version.json"
 MASTER_FILES = ("gachas.json", "cards.json")
 
 GACHA_FIELDS = ("id", "gachaType", "name", "startAt", "endAt", "wishSelectCount", "wishFixedSelectCount",
@@ -47,6 +51,29 @@ def fetch(master):
             f.write(data)
         os.replace(target + ".tmp", target)
         print("  ->", target, len(data), "bytes")
+
+
+def sync_resource_version():
+    """让 ResourceVersion.json 跟上 master 数据，否则新卡在旧资源清单里不存在。"""
+    print("下载", VERSION_URL)
+    with urllib.request.urlopen(VERSION_URL, timeout=60) as response:
+        current = json.loads(response.read())
+    with open(RESOURCE_VERSION, encoding="utf-8") as f:
+        local = json.load(f)
+    before = (local.get("assetVersion"), local.get("dataVersion"))
+    for key in ("assetVersion", "assetHash", "dataVersion"):
+        local[key] = current[key]
+    with open(RESOURCE_VERSION, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(local, f, indent=2)
+        f.write("\n")
+    print("  ResourceVersion.json：asset %s → %s，data %s → %s" % (before[0], local["assetVersion"], before[1], local["dataVersion"]))
+    # 资源请求头里的 App 版本写在 GachaResources.cs；游戏大版本更新后需要同步修改。
+    with open(GACHA_RESOURCES, encoding="utf-8") as f:
+        source = f.read()
+    for header, key in (("X-App-Version", "appVersion"), ("X-App-Hash", "appHash")):
+        match = re.search(r'"%s", "([^"]+)"' % header, source)
+        if match and match.group(1) != current[key]:
+            print("警告：GachaResources.cs 的 %s 是 %s，当前游戏为 %s，需要同步修改" % (header, match.group(1), current[key]), file=sys.stderr)
 
 
 def load(master, name):
@@ -100,13 +127,14 @@ def extract(gachas, cards, gacha_id):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--master", default=DEFAULT_MASTER, help="master 目录（默认 Cache/master）")
-    parser.add_argument("--fetch", action="store_true", help="先从 Haruki 下载 gachas.json / cards.json")
+    parser.add_argument("--fetch", action="store_true", help="先从 Haruki 下载 gachas.json / cards.json，并同步 ResourceVersion.json")
     parser.add_argument("--list", nargs="?", const=20, type=int, metavar="N", help="列出最近 N 个卡池（默认 20）")
     parser.add_argument("--gacha-id", type=int, help="要提取的卡池 id")
     parser.add_argument("--out", default=DEFAULT_OUT, help="输出路径（默认 Resources/GachaPool.json）")
     args = parser.parse_args()
     if args.fetch:
         fetch(args.master)
+        sync_resource_version()
     if args.list is None and args.gacha_id is None:
         if not args.fetch:
             parser.print_help()

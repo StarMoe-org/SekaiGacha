@@ -132,6 +132,8 @@ namespace SekaiGacha
             foreach (string id in results.Distinct())
             {
                 if (cards.ContainsKey(id)) continue;
+                if (!Assets.Has("character/member/" + id))
+                    throw new InvalidDataException("资源版本 " + Assets.AssetVersion + " 中没有卡牌 " + id + "（卡池数据比资源版本新），运行 python3 Tools/extract_gacha_pool.py --fetch 更新 ResourceVersion.json");
                 // 卡池模拟会抽到 ★2/★3；资源清单里没有获得语音的卡只显示卡面，不播语音。
                 string voice = "sound/gacha/get_voice/" + id;
                 if (Assets.Has(voice))
