@@ -17,6 +17,7 @@
     "com.unity.modules.director": "1.0.0",
     "com.unity.textmeshpro": "3.0.9",
     "com.unity.modules.screencapture": "1.0.0",
-    "com.unity.modules.imageconversion": "1.0.0"
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.unitywebrequestwww": "1.0.0"
   }
 }

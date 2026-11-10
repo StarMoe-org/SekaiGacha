@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: c2ff1c58dd8ff7d6253241161206192d
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData:
+  assetBundleName: shader/particles
+  assetBundleVariant:

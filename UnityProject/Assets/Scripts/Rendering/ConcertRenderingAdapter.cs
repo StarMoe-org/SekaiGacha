@@ -40,7 +40,7 @@ public sealed class ConcertRenderingAdapter : ScriptableRendererFeature
     }
     private static SekaiDrawObjectsPass Draw(string name, string tag, bool opaque, int evt, RenderQueueRange range)
     {
-        return new SekaiDrawObjectsPass(name, new[]{new ShaderTagId(tag)},opaque,(RenderPassEvent)evt,range) { ColorOnly = tag == "SekaiMeshFlarePara" };
+        return new SekaiDrawObjectsPass(name, new[]{new ShaderTagId(tag)},opaque,(RenderPassEvent)evt,range) { ColorOnly = tag == "SekaiMeshFlarePara" || !opaque };
     }
     public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData data)
     {

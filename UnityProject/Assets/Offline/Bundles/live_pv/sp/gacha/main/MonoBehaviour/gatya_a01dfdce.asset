@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0fc6f5187a81dc47999eefade6f0935, type: 3}
+  m_Name: gatya
+  m_EditorClassIdentifier: 
+  m_Version: 3
+  m_AnimClip: {fileID: 0}
+  m_Locked: 0
+  m_Muted: 0
+  m_CustomPlayableFullTypename: 
+  m_Curves: {fileID: 0}
+  m_Parent: {fileID: 11400000, guid: 4d1b8c5c473fa8157c59f7f4762a69ac, type: 2}
+  m_Children:
+  - {fileID: 11400000, guid: faadac9ce8938bc3a858fa1ef880635e, type: 2}
+  - {fileID: 11400000, guid: bdf1fcf41a54d828cf0f3e4ff159b385, type: 2}
+  - {fileID: 11400000, guid: 556a42e8d5d7386fd39bc3bc552ba8b2, type: 2}
+  - {fileID: 11400000, guid: 230b5a0473c45802399e91b4454a864c, type: 2}
+  - {fileID: 11400000, guid: 573d4981028d87a03d5990c110d5face, type: 2}
+  - {fileID: 11400000, guid: ea085a522f9b45c50f5f4d4f806307b6, type: 2}
+  - {fileID: 11400000, guid: 463b79dd572adb073333f1181d941811, type: 2}
+  - {fileID: 11400000, guid: 9683a6a33bd51baccbecd86b39c72dbe, type: 2}
+  - {fileID: 11400000, guid: 3ded20b1a8801b3d2059675cacd0f587, type: 2}
+  - {fileID: 11400000, guid: 3ebcc751c7825fa0b7893c1e74db3f30, type: 2}
+  - {fileID: 11400000, guid: 311c8caf3e3596cd5434a09a46793466, type: 2}
+  m_Clips: []
+  m_Markers:
+    m_Objects: []

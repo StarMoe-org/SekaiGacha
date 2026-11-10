@@ -1,0 +1,86 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: gatya_onpu_r02
+  m_Shader: {fileID: 4800000, guid: 5ddcfa70d23cce7d3df24e72134ff1a0, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+      _MainTex:
+        m_Texture: {fileID: 2800000, guid: 60757034c5a19f8d836b5cebf0c8feac, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _ShadowTex:
+        m_Texture: {fileID: 2800000, guid: f4d446a3dc0931df4c6a467b35d43cba, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _ValueTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: {}
+    m_Floats:
+      _BlendMode: 0
+      _Brightness: 1
+      _BumpScale: 1
+      _CharacterId: 0
+      _CharacterReflectionOff: 0
+      _Contrast: 0.5
+      _Cutoff: 0.5
+      _DetailNormalMapScale: 1
+      _DstBlend: 0
+      _FadeMode: 0
+      _GlossMapScale: 1
+      _Glossiness: 0.5
+      _GlossyReflections: 1
+      _HueCosAngle: 1
+      _HueSinAngle: 0
+      _Intensity: 0.1
+      _Metallic: 0
+      _Mode: 0
+      _OcclusionStrength: 1
+      _OutlineL: 0.7
+      _OutlineWidth: 0
+      _Parallax: 0.02
+      _ReflectionCasterDstBlend: 0
+      _ReflectionCasterSrcBlend: 1
+      _RimThreshold: 0.1
+      _Saturation: 0.5
+      _Scale: 1
+      _ShadowTexWeight: 1
+      _ShadowWidth: 0
+      _SmoothnessTextureChannel: 0
+      _SpecularHighlights: 1
+      _SrcBlend: 1
+      _StencilPassOperation: 0
+      _UVSec: 0
+      _Value: 0.5
+      _ZWrite: 1
+    m_Colors:
+      _BaseColor: {r: 0, g: 0, b: 0, a: 0}
+      _Color: {r: 1, g: 1, b: 1, a: 1}
+      _DefaultSkinColor: {r: 0.9921875, g: 0.9609375, b: 0.921875, a: 1}
+      _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+      _PartsAmbientColor: {r: 1, g: 1, b: 1, a: 1}
+      _ReflectionBlendColor: {r: 1, g: 1, b: 1, a: 1}
+      _Shadow1SkinColor: {r: 0.890625, g: 0.76953125, b: 0.796875, a: 1}
+      _Shadow2SkinColor: {r: 0.796875, g: 0.59375, b: 0.63671875, a: 1}
+      _SheetValue: {r: 1, g: 1, b: 0, a: 0}
+  m_BuildTextureStacks: []

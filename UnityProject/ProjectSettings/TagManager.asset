@@ -16,10 +16,10 @@ TagManager:
   - Water
   - UI
   - BlurUI
-  -
+  - 
   - PostEffect
   - MysekaiNavMeshBuildTarget
-  -
+  - 
   - Area
   - Live2D
   - Worldmap

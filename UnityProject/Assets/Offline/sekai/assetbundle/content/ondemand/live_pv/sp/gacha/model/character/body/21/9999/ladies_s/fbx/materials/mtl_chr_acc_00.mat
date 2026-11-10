@@ -1,0 +1,141 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: mtl_chr_acc_00
+  m_Shader: {fileID: 4800000, guid: 9e8401f529ec48b7ffb594f388be5ac6, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _LAMBERT
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs:
+      _DitherTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _EyelashMaskTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _FaceShadowTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _MainTex:
+        m_Texture: {fileID: 2800000, guid: 0894349c095e617e033ace4e22fde248, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _ShadowTex:
+        m_Texture: {fileID: 2800000, guid: 81cc8ccc665b99c98c3c2911384744df, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+      _ValueTex:
+        m_Texture: {fileID: 2800000, guid: 8f5aef8664c5b80524d3492b388140b0, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    m_Ints: {}
+    m_Floats:
+      _AlphaClip: 0
+      _Blend: 0
+      _BlendMode: 0
+      _BumpScale: 1
+      _CharacterId: 0
+      _CharacterReflectionOff: 0
+      _ClearCoatMask: 0
+      _ClearCoatSmoothness: 0
+      _Contrast: 0.5
+      _Cull: 2
+      _Cutoff: 0.5
+      _DetailAlbedoMapScale: 1
+      _DetailNormalMapScale: 1
+      _DitherAlpha: 1
+      _DstBlend: 0
+      _EnvironmentReflections: 1
+      _EyelashFaceCameraEdge1: 0.5
+      _EyelashFaceCameraEdge2: 0
+      _EyelashReadMask: 255
+      _EyelashStencil: 1
+      _EyelashStencilComp: 0
+      _EyelashStencilFail: 0
+      _EyelashStencilOp: 0
+      _EyelashStencilZFail: 0
+      _EyelashTransparent: 0.5
+      _EyelashWriteMask: 255
+      _FadeMode: 0
+      _GlossMapScale: 1
+      _Glossiness: 0
+      _GlossyReflections: 1
+      _HeadNormalBlend: 0
+      _HueCosAngle: 1
+      _HueSinAngle: 0
+      _IsAccessory: 0
+      _IsLeftEyeClose: 0
+      _IsRightEyeClose: 0
+      _Metallic: 0
+      _Mode: 0
+      _OcclusionStrength: 1
+      _OutlineL: 0.5
+      _OutlineOffset: 0
+      _OutlineWidth: 0.001
+      _Parallax: 0.02
+      _QueueOffset: 0
+      _RangeLimit: 0
+      _ReadMask: 255
+      _ReceiveShadows: 1
+      _ReflectionCasterDstBlend: 0
+      _ReflectionCasterSrcBlend: 1
+      _RimThreshold: 0.2
+      _Saturation: 0.5
+      _ShadowTexWeight: 1
+      _ShadowWidth: 0
+      _Smoothness: 0.5
+      _SmoothnessTextureChannel: 0
+      _SpecularHighlights: 1
+      _SpecularPower: 0
+      _SrcBlend: 1
+      _Stencil: 1
+      _StencilComp: 0
+      _StencilFail: 0
+      _StencilOp: 0
+      _StencilPassOperation: 0
+      _StencilZFail: 0
+      _Surface: 0
+      _UVSec: 0
+      _UseClothNormal: 0
+      _UseEyebrowVertexAlpha: 1
+      _UseFaceSDF: 0
+      _UseLambert: 1
+      _UseOutlineSecondNormal: 0
+      _Value: 0.5
+      _WorkflowMode: 1
+      _WriteMask: 255
+      _ZWrite: 1
+    m_Colors:
+      _BaseColor: {r: 0.8, g: 0.8, b: 0.8, a: 1}
+      _Color: {r: 0.9063317, g: 0.9063317, b: 0.9063317, a: 1}
+      _DefaultSkinColor: {r: 0.9921875, g: 0.9609375, b: 0.921875, a: 1}
+      _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+      _FaceFront: {r: 0, g: 0, b: 0, a: 0}
+      _HeadDotDirectionalLightValues: {r: 1, g: 1, b: 1, a: 1}
+      _HeadPosition: {r: 0, g: 0, b: 0, a: 0}
+      _PartsAmbientColor: {r: 1, g: 1, b: 1, a: 1}
+      _ReflectionBlendColor: {r: 1, g: 1, b: 1, a: 1}
+      _Shadow1SkinColor: {r: 0.890625, g: 0.76953125, b: 0.796875, a: 1}
+      _Shadow2SkinColor: {r: 0.796875, g: 0.59375, b: 0.63671875, a: 1}
+      _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
+  m_BuildTextureStacks: []

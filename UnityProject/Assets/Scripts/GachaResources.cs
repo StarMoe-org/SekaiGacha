@@ -14,6 +14,7 @@ namespace SekaiGacha
     public sealed class GachaResources : IDisposable
     {
         readonly string root;
+        readonly GachaOfflineCatalog offline;
         readonly Dictionary<string, AssetBundle> loaded = new Dictionary<string, AssetBundle>();
         readonly Dictionary<string, Stream> streams = new Dictionary<string, Stream>();
         readonly Dictionary<string, Shader> shaders = new Dictionary<string, Shader>();
@@ -23,10 +24,32 @@ namespace SekaiGacha
         public string Status { get; private set; }
         public int ShaderFailures { get; private set; }
         string AssetBase => "https://" + version["host"] + "-assetbundle.sekai.colorfulpalette.org/" + version["assetVersion"] + "/" + version["assetHash"] + "/android/";
-        public GachaResources(string cache) { root = cache; Directory.CreateDirectory(root); }
+        public GachaResources(string cache)
+        {
+            root = cache;
+#if UNITY_WEBGL
+            offline = Resources.Load<GachaOfflineCatalog>("GachaOfflineCatalog");
+            if (!offline) throw new InvalidDataException("缺少 WebGL 离线资源目录");
+#endif
+            if (!offline) Directory.CreateDirectory(root);
+        }
 
         public IEnumerator Initialize()
         {
+            foreach (var shader in Resources.LoadAll<Shader>(""))
+                if (shader.isSupported && !shaders.ContainsKey(shader.name)) shaders.Add(shader.name, shader);
+            if (offline)
+            {
+                foreach (var asset in offline.entries.Select(e => e.asset).Distinct())
+                {
+                    if (asset is Material material) Rebind(material);
+                    if (asset is GameObject prefab) Rebind(prefab);
+                }
+                foreach (var variants in offline.entries.Select(e => e.asset).OfType<ShaderVariantCollection>().Distinct())
+                    GachaShaderWarmup.WarmUpWhenNotLoaded(variants);
+                Debug.Log("GACHA_OFFLINE_READY");
+                yield break;
+            }
             version = JObject.Parse(Resources.Load<TextAsset>("ResourceVersion").text);
             using (var request = Request("https://issue.sekai.colorfulpalette.org/api/signature", "POST"))
             {
@@ -50,8 +73,6 @@ namespace SekaiGacha
                 }
             }
             bundles = (JObject)JObject.Parse(File.ReadAllText(manifest))["bundles"];
-            foreach (var shader in Resources.LoadAll<Shader>(""))
-                if (shader.isSupported && !shaders.ContainsKey(shader.name)) shaders.Add(shader.name, shader);
             Debug.Log("GACHA_SIGNED_NO_ACCOUNT version=" + version["assetVersion"]);
         }
 
@@ -85,6 +106,7 @@ namespace SekaiGacha
         }
         public IEnumerator Load(params string[] names)
         {
+            if (offline) yield break;
             var visited = new HashSet<string>();
             foreach (string name in names.SelectMany(n => Dependencies(n, visited)))
             {
@@ -114,6 +136,12 @@ namespace SekaiGacha
         }
         public T Get<T>(string bundle, string name) where T : UnityEngine.Object
         {
+            if (offline)
+            {
+                var found = offline.entries.FirstOrDefault(e => e.bundle == bundle && e.name.Equals(name, StringComparison.OrdinalIgnoreCase) && e.asset is T).asset as T;
+                if (!found) throw new InvalidDataException("离线资源缺失 " + bundle + "/" + name);
+                return found;
+            }
             var value = loaded[bundle];
             T result = value.LoadAsset<T>(name);
             if (!result)
@@ -125,7 +153,7 @@ namespace SekaiGacha
             if (result is GameObject prefab) Rebind(prefab);
             return result;
         }
-        public T[] All<T>(string bundle) where T : UnityEngine.Object => loaded[bundle].LoadAllAssets<T>();
+        public T[] All<T>(string bundle) where T : UnityEngine.Object => offline ? offline.entries.Where(e => e.bundle == bundle).Select(e => e.asset).OfType<T>().Distinct().ToArray() : loaded[bundle].LoadAllAssets<T>();
         void Rebind(GameObject prefab)
         {
             foreach (var renderer in prefab.GetComponentsInChildren<Renderer>(true))

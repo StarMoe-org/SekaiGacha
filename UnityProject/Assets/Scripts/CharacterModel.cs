@@ -1,4 +1,7 @@
-// 源自恢复工程 Assets/Scripts/Assembly-CSharp/Sekai.Core/CharacterModel.cs；仅保留抽卡调用链，改动见 docs/重建问题记录.md。
+// 源自恢复工程 Assets/Scripts/Assembly-CSharp/Sekai.Core/CharacterModel.cs；保留抽卡渲染调用链。
+using UTJ;
+using Sekai.Live;
+using Sekai.Scripts.Live.Character;
 using System;
 using System.Diagnostics;
 using Debug = UnityEngine.Debug;
@@ -11,7 +14,19 @@ using Sekai.Rendering;
 using Sekai.Rendering.Setup3DUtility;
 using Sekai.Scripts.Live.Common;
 namespace Sekai.Core {
-public sealed class CharacterModel : MonoBehaviour {
+public sealed class CharacterModel : MonoBehaviour, ISekaiCharacterReflectionOff {
+ public delegate void AnotherCharacterSetup(out GameObject face, out GameObject body, out GameObject hair, out GameObject hip, out GameObject headJoint, out Transform positionNote, out float characterHeight);
+ SpringManager[] springManagers;
+ readonly int CharacterReflectionOffId = Shader.PropertyToID("_CharacterReflectionOff");
+ bool isReflectionHidingPrev;
+ public bool IsReflectionHiding { get; private set; }
+ public int FormationId => formationId;
+ public int GameObjectHashCode => gameObject.GetHashCode();
+ public SkinnedMeshRenderer BodyRenderer { get; private set; }
+ public GameObject HeadJoint { get; private set; }
+ public GameObject Acc { get; private set; }
+ public bool HasCommonAccessory { get; private set; }
+ public float HeelOffset { get; private set; }
  public int formationId;
  int _rendererFormationId, _stencilFormationId=-1;
  [SerializeField] Color defaultSkinColor,shadow1SkinColor,shadow2SkinColor;
@@ -359,33 +374,65 @@ public class BlendShapeIndexTable : IBlendShapeIndexTable
 			}
 		}
 
-public void GachaModelSetup(int characterId, float height, CharacterLightData lightData, Color[] skinColors)
+public void Setup(int characterId, CharacterSetupSignals signals, float height, CharacterLightData lightData, Color[] skinColors, AnotherCharacterSetup anotherCharacterSetup = null)
 		{
 			CharacterDataId = characterId;
-			Transform transform = base.transform.GetComponentsInChildren<Transform>().FirstOrDefault((Transform transform3) => transform3.name == "Position");
-			if ((object)transform == null)
+			name = "CharacterModel";
+			if (anotherCharacterSetup != null)
 			{
-				transform = base.transform;
+				anotherCharacterSetup(out var face, out var body, out var hair, out var hip, out var headJoint, out var positionNote, out var characterHeight);
+				Face = face;
+				Body = body;
+				Hair = hair;
+				Hip = hip;
+				HeadJoint = headJoint;
+				PositionNote = positionNote;
+				Transform transform = PositionNote;
+				float y = Vector3.one.y;
+				float z = Vector3.one.z;
+				float x = Vector3.one.x;
+				transform.localScale = new Vector3
+				{
+					x = characterHeight * x,
+					y = characterHeight * y,
+					z = characterHeight * z
+				};
+				Height = characterHeight;
+				headTransform = headJoint.transform;
+				BodyRenderer = body.GetComponent<SkinnedMeshRenderer>();
+				return;
 			}
-			PositionNote = transform;
-			Transform transform2 = PositionNote;
-			float y = Vector3.one.y;
-			float z = Vector3.one.z;
-			float x = Vector3.one.x;
-			transform2.localScale = new Vector3
+			Transform transform2 = base.transform.GetComponentsInChildren<Transform>().FirstOrDefault((Transform transform6) => transform6.name == "Position");
+			if ((object)transform2 == null)
 			{
-				x = x * height,
-				y = y * height,
-				z = z * height
+				transform2 = base.transform;
+			}
+			PositionNote = transform2;
+			Transform transform3 = PositionNote;
+			float y2 = Vector3.one.y;
+			float z2 = Vector3.one.z;
+			float x2 = Vector3.one.x;
+			transform3.localScale = new Vector3
+			{
+				x = x2 * height,
+				y = y2 * height,
+				z = z2 * height
 			};
 			Height = height;
+			if (signals.isHeelOffset)
+			{
+				SetupHeelOffset();
+			}
 			renderers = gameObject.GetComponentsInChildren<Renderer>();
-            rendererBufferTable.Rebuild(renderers);
-			Face = GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "Face")?.gameObject;
-			Body = GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "Body")?.gameObject;
-			Hair = GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "Hair")?.gameObject;
-			Hip = GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "Hip")?.gameObject;
-			Neck = GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == "Neck")?.gameObject;
+			Face = UTJ.GameObjectExtensions.GameObjectUtil.FindChildByName(gameObject, "Face")?.gameObject;
+			Body = UTJ.GameObjectExtensions.GameObjectUtil.FindChildByName(gameObject, "Body")?.gameObject;
+			Hair = UTJ.GameObjectExtensions.GameObjectUtil.FindChildByName(gameObject, "Hair")?.gameObject;
+			Hip = UTJ.GameObjectExtensions.GameObjectUtil.FindChildByName(gameObject, "Hip")?.gameObject;
+			Neck = UTJ.GameObjectExtensions.GameObjectUtil.FindChildByName(gameObject, "Neck")?.gameObject;
+			Acc = UTJ.GameObjectExtensions.GameObjectUtil.FindChildByName(gameObject, "Acc")?.gameObject;
+			HasCommonAccessory = Acc != null && !Acc.transform.parent.name.Contains("Character");
+			ValidateAnimator();
+			RebuildMaterialCache();
 			SetupRenderQueueAndStencil(rendererBufferTable, _rendererFormationId);
 			if (lightData != null)
 			{
@@ -413,10 +460,23 @@ public void GachaModelSetup(int characterId, float height, CharacterLightData li
 				}
 			}
 			SetupCharacterSettings();
-			
+			UpdateReflection();
 			SetupDitherTexture(renderers);
 			SetupHeadTransform();
-			if (!(skinColors == null || skinColors.Length == 0))
+			Transform transform4 = base.transform.Find("Body");
+			if ((bool)transform4)
+			{
+				SkinnedMeshRenderer component = transform4.GetComponent<SkinnedMeshRenderer>();
+				if ((bool)component)
+				{
+					Transform transform5 = Array.Find(component.bones, (Transform p) => p.name == "Head");
+					HeadJoint = ((!(transform5 == null)) ? transform5.gameObject : null);
+				}
+				BodyRenderer = component;
+			}
+			SetupSpringBone();
+			SetupAccessoryMaterial();
+			if (skinColors != null && skinColors.Length != 0)
 			{
 				int num = skinColors.Length;
 				switch (num)
@@ -432,7 +492,152 @@ public void GachaModelSetup(int characterId, float height, CharacterLightData li
 				}
 				SetupSkin(skinColors[0], skinColors[1], skinColors[2]);
 			}
-			name = "CharacterModel";
+			SetupEyeMaterialController();
+		}
+
+private void ValidateAnimator()
+		{
+			Animator animator = gameObject.GetComponent<Animator>();
+			if (animator == null)
+			{
+				animator = gameObject.GetComponentInChildren<Animator>();
+			}
+			ValidateAnimator(animator);
+		}
+
+private void ValidateAnimator(Animator animator)
+		{
+			if (animator != null && animator.cullingMode != AnimatorCullingMode.AlwaysAnimate)
+			{
+				animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+			}
+		}
+
+public void SetupHeelOffset()
+		{
+			Transform transform = base.transform.GetComponentsInChildren<Transform>().FirstOrDefault((Transform x) => x.name == "PositionOffset");
+			Transform transform2 = base.transform.GetComponentsInChildren<Transform>().FirstOrDefault((Transform x) => x.name == "OffsetValue");
+			if (transform != null && transform2 != null)
+			{
+				transform.localPosition = transform2.localPosition;
+				HeelOffset = transform.localPosition.y;
+			}
+		}
+
+public void SetupSpringBone()
+		{
+			SpringManager[] array = springManagers;
+			if (array == null)
+			{
+				springManagers = gameObject.GetComponentsInChildren<SpringManager>();
+				array = springManagers;
+			}
+			if (array.Length < 1)
+			{
+				return;
+			}
+			long num = 0L;
+			int num2 = 0;
+			while (true)
+			{
+				SpringManager springManager = array[(nint)num];
+				springManager.FindSpringBones(includeInactive: true);
+				SpringBone[] springBones = springManager.springBones;
+				if (springBones.Length >= 1)
+				{
+					long num3 = 0L;
+					int num4 = 0;
+					while (true)
+					{
+						springBones[(nint)num3].Initialize(springManager);
+						if (num4 + 1 >= springBones.Length)
+						{
+							break;
+						}
+						num3 = (uint)(num4 + 1);
+						num4++;
+					}
+				}
+				springManager.UpdateBoneIsAnimatedStates(new List<string>());
+				if (num2 + 1 >= array.Length)
+				{
+					break;
+				}
+				num = (uint)(num2 + 1);
+				num2++;
+			}
+		}
+
+private void SetupAccessoryMaterial()
+		{
+			RendererBufferCache acc = rendererBufferTable.Acc;
+			if (acc == null || (acc.MaterialDatas == null || acc.MaterialDatas.Length == 0))
+			{
+				return;
+			}
+			MaterialData[] materialDatas = rendererBufferTable.Acc.MaterialDatas;
+			if (materialDatas.Length < 1)
+			{
+				return;
+			}
+			long num = 0L;
+			int num2 = 0;
+			while (true)
+			{
+				Material sharedMaterial = materialDatas[(nint)num].SharedMaterial;
+				if (sharedMaterial.HasFloat(ShaderPropertyID.IS_ACCESSORY_ID))
+				{
+					sharedMaterial.SetFloat(ShaderPropertyID.IS_ACCESSORY_ID, 1f);
+				}
+				if (num2 + 1 >= materialDatas.Length)
+				{
+					break;
+				}
+				num = (uint)(num2 + 1);
+				num2++;
+			}
+		}
+
+private void SetupEyeMaterialController()
+		{
+			CharacterEyeMaterialController.Create(this);
+		}
+
+public void UpdateReflection()
+		{
+			if (renderers == null)
+			{
+				return;
+			}
+			RendererBufferCache[] rendererBufferCaches = rendererBufferTable.RendererBufferCaches;
+			if (rendererBufferCaches.Length >= 1)
+			{
+				bool flag = IsReflectionHiding;
+				long num = 0L;
+				int num2 = 0;
+				while (true)
+				{
+					foreach (Material item in rendererBufferCaches[(nint)num].MaterialDatas.Select((MaterialData data) => data.SharedMaterial))
+					{
+						item.SetInt(CharacterReflectionOffId, flag ? 1 : 0);
+					}
+					if (num2 + 1 >= rendererBufferCaches.Length)
+					{
+						break;
+					}
+					num = (uint)(num2 + 1);
+					num2++;
+				}
+			}
+			if (IsReflectionHiding)
+			{
+				SekaiCharacterReflectionOffSettings.RegisterCharacterReflectionOff(this);
+			}
+			else
+			{
+				SekaiCharacterReflectionOffSettings.UnregisterCharacterReflectionOff(this);
+			}
+			isReflectionHidingPrev = IsReflectionHiding;
 		}
 
 private void RebuildMaterialCache()

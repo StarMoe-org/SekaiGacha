@@ -1,0 +1,43 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d0fc6f5187a81dc47999eefade6f0935, type: 3}
+  m_Name: PostEffect
+  m_EditorClassIdentifier: 
+  m_Version: 3
+  m_AnimClip: {fileID: 0}
+  m_Locked: 0
+  m_Muted: 0
+  m_CustomPlayableFullTypename: 
+  m_Curves: {fileID: 0}
+  m_Parent: {fileID: 11400000, guid: 4d1b8c5c473fa8157c59f7f4762a69ac, type: 2}
+  m_Children:
+  - {fileID: 11400000, guid: 7235794a6676f6fe3ad0bc6acdf4cb70, type: 2}
+  - {fileID: 11400000, guid: 05c119500dd42c18207dac8d2f8e6e03, type: 2}
+  - {fileID: 11400000, guid: 92c3e0d62a23d6b436f36034bbe16790, type: 2}
+  - {fileID: 11400000, guid: f8a7e6ca6c8107215280f20902b9c285, type: 2}
+  - {fileID: 11400000, guid: e7a41985326e6a3d573c586933e7a8a5, type: 2}
+  - {fileID: 11400000, guid: 8554317dc6f0e0f9807e71c91ccddf84, type: 2}
+  - {fileID: 11400000, guid: 11dcc67eb39b1ec0d00888c1b320456e, type: 2}
+  - {fileID: 11400000, guid: eb495df0a352ad53516fc68fe892eb0b, type: 2}
+  - {fileID: 11400000, guid: 08bc311bf2d7acfb42acdbc8d67be317, type: 2}
+  - {fileID: 11400000, guid: 02304b8a1366d88efa599c8e02be39cb, type: 2}
+  - {fileID: 11400000, guid: 665760a60406bf3099572ac68f2659f9, type: 2}
+  - {fileID: 11400000, guid: b2d2ce01c7db0a8d17491b8e8d332dc5, type: 2}
+  - {fileID: 11400000, guid: fcbb0a90b0f40e412d4802e962929bdf, type: 2}
+  - {fileID: 11400000, guid: c5ec2db24d35f4b41e7f37e5733257ea, type: 2}
+  - {fileID: 11400000, guid: e01386300e67f03cede1e3888b611c34, type: 2}
+  - {fileID: 11400000, guid: d0ddec037a9e6c60b92ec6b39984b0a0, type: 2}
+  - {fileID: 11400000, guid: 8ba63894fc58be89a2ba82ccb6202d38, type: 2}
+  - {fileID: 11400000, guid: ce5a2c9c1ba796ad4a4ee8dbf3aadccb, type: 2}
+  m_Clips: []
+  m_Markers:
+    m_Objects: []

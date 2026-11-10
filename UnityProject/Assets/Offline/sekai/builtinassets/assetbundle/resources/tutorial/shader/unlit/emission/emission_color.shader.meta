@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: cb846d46f6b96eef38fc3bbca7c0ecc9
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  userData:
+  assetBundleName: shader/unlit
+  assetBundleVariant:

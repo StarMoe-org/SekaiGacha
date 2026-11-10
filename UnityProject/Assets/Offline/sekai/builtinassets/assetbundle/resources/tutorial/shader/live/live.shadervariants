@@ -1,0 +1,439 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!200 &20000000
+ShaderVariantCollection:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: live
+  m_Shaders:
+  - first: {fileID: 4800000, guid: 954cd5559b88398dfca8dace85b0af13, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: 
+        passType: 13
+  - first: {fileID: 4800000, guid: 9e8401f529ec48b7ffb594f388be5ac6, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 1
+      - keywords: 
+        passType: 13
+      - keywords: _FACE_SHADOW_RANGE_LIMIT _LAMBERT _UseFaceSDF
+        passType: 13
+      - keywords: _HAIR_SHADOW _LAMBERT
+        passType: 13
+      - keywords: _HEAD_NORMAL_BLENDING
+        passType: 13
+      - keywords: _LAMBERT
+        passType: 13
+      - keywords: _LAMBERT _UseFaceSDF
+        passType: 13
+      - keywords: _OUTLINE_SECOND_NORMAL
+        passType: 13
+      - keywords: 
+        passType: 14
+      - keywords: _FACE_SHADOW_RANGE_LIMIT _LAMBERT _UseFaceSDF
+        passType: 14
+      - keywords: _HAIR_SHADOW _LAMBERT
+        passType: 14
+      - keywords: _LAMBERT
+        passType: 14
+      - keywords: _LAMBERT _UseFaceSDF
+        passType: 14
+  - first: {fileID: 4800000, guid: 3e38a933ca50a3d8ad70f9f4186190db, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 2a1153bb99823c75b56316efd7b6e8e2, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: f1189a20923aed3508e9f86338a1ba62, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: _USE_OVERLAY_FLIPBOOK
+        passType: 0
+  - first: {fileID: 4800000, guid: bea2abfc9c819f71a86f3a342f404e25, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: 
+        passType: 13
+  - first: {fileID: 4800000, guid: d8479dd9ec0ccd72aa9ec8f192c7e54d, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 27f465a20d04c0d2d5c657c160c4c83a, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: APPLY_FOG
+        passType: 0
+      - keywords: APPLY_FOG CALC_DEPTH
+        passType: 0
+      - keywords: APPLY_FOG SOFT
+        passType: 0
+      - keywords: BRIGHTNESS
+        passType: 0
+      - keywords: CALC_DEPTH
+        passType: 0
+      - keywords: CALC_DEPTH SOFT
+        passType: 0
+      - keywords: SOFT
+        passType: 0
+  - first: {fileID: 4800000, guid: 3a6f88a7007239d89939af23b3005fdc, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: bb8933b98efded38436da9813be898a5, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: cc070c9fc1788b364b2dd0b91a7b3dd2, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 2373617542512c4459495d790bfae393, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: ca7ae60ef367f50510d1b36f30fd6691, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 5ddcfa70d23cce7d3df24e72134ff1a0, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: 
+        passType: 1
+      - keywords: 
+        passType: 13
+  - first: {fileID: 4800000, guid: 0822c2ae8274fa36c5812976b8ef5df1, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: b314517948bef2faaabbd5198b02c332, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 75c84a68b8afde5cb84cfe12b33c6d2b, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: c615bc646e6cc59c15d581672cdd335c, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 0ab8ea1cb222f49120bb0b4ba86bb2ae, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: ccc5165dec8f01ca51b5d0c5779a2029, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 9e6b40d9c9ca518d1786a177ddf90a99, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: APPLY_FOG
+        passType: 0
+      - keywords: APPLY_FOG CALC_DEPTH
+        passType: 0
+      - keywords: APPLY_FOG INSTANCING_ON
+        passType: 0
+      - keywords: CALC_DEPTH
+        passType: 0
+      - keywords: CALC_DEPTH INSTANCING_ON
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+      - keywords: PROCEDURAL_INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 138b143eb170dee769acdb7b41543855, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 474e23050b8a32a48ac54ec9d9f38582, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 85eefbb3d7d95789002f6c69659a03fc, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 71ea3f5f61e74a455ff8ee88317b5355, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 88ffce6de5d84a410a6503cdb28b9980, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 0ad671bb63cf0c35b6701a38e5b94f44, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 9344535f64667c6419278fd8e92de9bb, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 4f18093f3251f3d6649fb003d318ad8e, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 148a921ed97b194a2004ec7a360e8e8e, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: e4a0a0ece906505b6e5295035e56071b, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 13
+      - keywords: _FACE_SHADOW_RANGE_LIMIT _LAMBERT _UseFaceSDF
+        passType: 13
+      - keywords: _HAIR_SHADOW _LAMBERT
+        passType: 13
+      - keywords: _HAIR_SHADOW _LAMBERT _UseFaceSDF
+        passType: 13
+      - keywords: _HEAD_NORMAL_BLENDING
+        passType: 13
+      - keywords: _LAMBERT
+        passType: 13
+      - keywords: _LAMBERT _UseFaceSDF
+        passType: 13
+      - keywords: _OUTLINE_SECOND_NORMAL
+        passType: 13
+      - keywords: 
+        passType: 14
+      - keywords: _FACE_SHADOW_RANGE_LIMIT _LAMBERT _UseFaceSDF
+        passType: 14
+      - keywords: _HAIR_SHADOW _LAMBERT
+        passType: 14
+      - keywords: _LAMBERT
+        passType: 14
+      - keywords: _LAMBERT _UseFaceSDF
+        passType: 14
+  - first: {fileID: 4800000, guid: 4d304a2b073de8b2bfb9eb36f6842b6f, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 822c9fba08eec7a05ab8d65b742c74ce, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 4000b0c188dd2f6ddbedba88eabd5f9d, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: c845116986de301a8f64907913da2e36, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: c845a987456e009db5bdc99dfde719d4, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 7134dd7f3295a2c46b7b3ae918d99de2, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 6db9e91c46d2affe5b4417a4dd7f8db7, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 9544d899c107a7fdd3461188c087edab, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: f3ea35dcb5d1556baf21496041f995a8, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: d1bbbc6cef71f0a1ddf4b66732cb5aa3, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: dfe75f95ee22c0f922bd7b49a8e47cf7, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 87c4708637a21616d334ff094459f3b4, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: c6736fe02253efc48c44f53df2083879, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: APPLY_FOG
+        passType: 0
+      - keywords: APPLY_FOG CALC_DEPTH
+        passType: 0
+      - keywords: APPLY_FOG INSTANCING_ON
+        passType: 0
+      - keywords: CALC_DEPTH
+        passType: 0
+      - keywords: CALC_DEPTH INSTANCING_ON
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+      - keywords: PROCEDURAL_INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 1f2a5d790db76af35d44801fae05c181, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: e0be7106c17d6f1192042fd402b546f2, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: f4a5ad1a9cd10fc1678f04d3f0983c84, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: 
+        passType: 1
+  - first: {fileID: 4800000, guid: 6cd71ea9243e81eec9612fe50bee5878, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 6d538f115f8e46f7cb0e3905b5da5a7c, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: f504d7e1e736e2129be4cd473dd30d7e, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: f542043b0013a277c5a60dc0ff558e96, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 7c32bf35363fb2d26ab1df6eeca626a2, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 568faf421f0a99deed7ef483ff509eca, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: f4f3e0cd5bec2460283dab01bda2e608, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+  - first: {fileID: 4800000, guid: 24b76995f639898931639a3e347865f5, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: INSTANCING_ON
+        passType: 0
+  - first: {fileID: 4800000, guid: 0ff6624252cca64da9a2a17e73b89a48, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0
+      - keywords: APPLY_FOG
+        passType: 0
+      - keywords: APPLY_FOG CALC_DEPTH
+        passType: 0
+      - keywords: APPLY_FOG CALC_DEPTH COLORMAP
+        passType: 0
+      - keywords: APPLY_FOG COLORMAP
+        passType: 0
+      - keywords: CALC_DEPTH
+        passType: 0
+      - keywords: CALC_DEPTH COLORMAP
+        passType: 0
+      - keywords: COLORMAP
+        passType: 0
+  - first: {fileID: 4800000, guid: 4122401371cbdf0b40d041daf6d9add3, type: 3}
+    second:
+      variants:
+      - keywords: 
+        passType: 0

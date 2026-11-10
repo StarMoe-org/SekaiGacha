@@ -52,7 +52,7 @@ namespace SekaiGacha
             fallbackCamera.GetUniversalAdditionalCameraData().SetRenderer(1);
             fallbackCamera.gameObject.AddComponent<AudioListener>();
             Audio = gameObject.AddComponent<GachaAudio>();
-            Assets = new GachaResources(Path.GetFullPath(Path.Combine(Application.dataPath, "../../Cache")));
+            Assets = new GachaResources(Application.platform == RuntimePlatform.WebGLPlayer ? Application.persistentDataPath : Path.GetFullPath(Path.Combine(Application.dataPath, "../../Cache")));
             StartCoroutine(Guard(Initialize()));
         }
         IEnumerator Initialize()
@@ -69,28 +69,13 @@ namespace SekaiGacha
             reveal = InstantiateForSetup(Assets.Get<GameObject>("effect_asset/gacha_obtain_prize", "fx_gacha_card_r4_01"));
             effects.Add(reveal);
             SetupReveal(reveal, cards[catalog[0]], CharacterId(catalog[0]));
-            var target = new RenderTexture(Screen.width, Screen.height, 24);
-            foreach (var camera in main.GetComponentsInChildren<Camera>(true).Concat(reveal.GetComponentsInChildren<Camera>(true))) camera.targetTexture = target;
-            Audio.Muted = true;
-            yield return WarmTimeline(main, true);
-            yield return WarmTimeline(reveal, false);
-            foreach (string card in catalog)
-            {
-                SetupReveal(reveal, cards[card], CharacterId(card));
-                var director = reveal.GetComponent<PlayableDirector>();
-                director.time = director.duration * .6;
-                director.Evaluate();
-                yield return null;
-                yield return null;
-            }
-            Audio.Muted = false;
             SetCameras(main, false);
             SetCameras(reveal, false);
-            foreach (var camera in main.GetComponentsInChildren<Camera>(true).Concat(reveal.GetComponentsInChildren<Camera>(true))) camera.targetTexture = null;
-            target.Release();
-            Destroy(target);
+            // 装载结束后跨过当前帧，避免初始化耗时进入演出的首帧时钟。
+            yield return null;
+            yield return new WaitForEndOfFrame();
             Phase = "就绪";
-            Debug.Log("GACHA_READY_PREWARMED");
+            Debug.Log("GACHA_READY");
             PlayCards(Enumerable.Range(0, 10).Select(_ => catalog[UnityEngine.Random.Range(0, catalog.Length)]).ToArray());
         }
         static GameObject InstantiateForSetup(GameObject prefab)
@@ -132,19 +117,21 @@ namespace SekaiGacha
             for (int i = 0; i < prizeSlots.Count; i++) prizeSlots[i].SetActive(i < DrawCount);
             fallbackCamera.enabled = false;
             SetCameras(reveal, false);
+            main.SetActive(true);
             SetCameras(main, true);
             Phase = "3D演出";
             yield return PlayTimeline(main, true);
+            main.SetActive(false);
             foreach (string card in CurrentResults)
             {
                 SetupReveal(reveal, cards[card], CharacterId(card));
                 SetCameras(main, false);
                 SetCameras(reveal, true);
                 Phase = "揭卡";
-                double voiceDuration = Audio.PlayVoice(card);
+                Audio.PlayVoice(card);
                 RevealedCount++;
                 Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card);
-                yield return PlayTimeline(reveal, false, voiceDuration);
+                yield return PlayTimeline(reveal, false);
             }
             // 无结算界面时停留在原版点击跳转使用的末尾展示段。
             CurrentDirector.time = Math.Max(0, CurrentDirector.duration - CardEndWaitSeconds);
@@ -160,7 +147,11 @@ namespace SekaiGacha
             if (Phase != "3D演出" && Phase != "揭卡") return;
             float ms = Time.unscaledDeltaTime * 1000;
             MaximumFrameMs = Mathf.Max(MaximumFrameMs, ms);
-            if (ms > 100) SlowFrames++;
+            if (ms > 100)
+            {
+                SlowFrames++;
+                Debug.Log("GACHA_SLOW_FRAME ms=" + ms + " phase=" + Phase + " time=" + (CurrentDirector ? CurrentDirector.time : 0));
+            }
         }
         IEnumerator Guard(IEnumerator routine)
         {
@@ -206,23 +197,22 @@ namespace SekaiGacha
                 if (track.name == "OmoiAnimation") director.SetGenericBinding(track, omoi.GetComponent<Animator>() ?? omoi.gameObject.AddComponent<Animator>());
                 if (track.name == "Light")
                     foreach (var clip in track.GetClips())
-                        if (clip.asset is AnimationPlayableAsset animation) animation.clip = Assets.Get<AnimationClip>("live_pv/sp/gacha/timeline", "gatya_light_9100_p");
+                        if (clip.displayName == "gatya_light" && clip.asset is AnimationPlayableAsset animation) animation.clip = Assets.Get<AnimationClip>("live_pv/sp/gacha/timeline", "gatya_light_9100_p");
                 if (track.name == "eff_9200_hansya_gosen_r02")
                     foreach (var clip in track.GetClips())
-                        if (clip.asset is LiveEffectClip effect) effect.template.prefab = Assets.Get<GameObject>("live_pv/sp/gacha/effect", "eff_9200_hansya_gosen_r04");
-                if (track is CP.Timeline.LoopTrack) track.muted = true;
+                        if (clip.displayName == "eff_9200_hansya_gosen_r02" && clip.asset is LiveEffectClip effect) effect.template.prefab = Assets.Get<GameObject>("live_pv/sp/gacha/effect", "eff_9200_hansya_gosen_r04");
+                if (track is CP.Timeline.LoopTrack) track.muted = false;
             }
             var sphere = root.transform.Find("Stage/stage/stage_9200/Root/stage_9200/pSphere1");
             if (sphere) sphere.GetComponent<Renderer>().material.mainTexture = Assets.Get<Texture>("live_pv/sp/gacha/model/stage", "stage_tex_02");
             SetupCameras(root);
-            foreach (var model in root.GetComponentsInChildren<Sekai.Core.CharacterModel>(true)) model.GachaModelSetup(21, 1.58f, new Sekai.Scripts.Live.Common.CharacterLightData(root.GetComponentInChildren<Sekai.SekaiDirectionalLight>(true)), new Color[] { new Color32(254,246,236,255), new Color32(228,197,204,255), new Color32(204,152,163,255) });
-            foreach (var model in root.GetComponentsInChildren<Sekai.Core.CharacterModel>(true)) model.SetupHairShadow(false);
+            foreach (var model in root.GetComponentsInChildren<Sekai.Core.CharacterModel>(true)) model.Setup(21, new Sekai.Live.CharacterSetupSignals(false), 1.58f, new Sekai.Scripts.Live.Common.CharacterLightData(root.GetComponentInChildren<Sekai.SekaiDirectionalLight>(true)), new Color[] { new Color32(254,246,236,255), new Color32(228,197,204,255), new Color32(204,152,163,255) });
             foreach (var flare in root.GetComponentsInChildren<Sekai.Core.MeshFlareParaController>(true))
                 flare.Setup(root.GetComponentInChildren<Sekai.Core.Graphics.PostEffectV2>(true).GetComponent<Camera>(), Assets.Get<Sekai.Core.MeshFlareParaTexData>("live_pv/model/mesh_flare_para/textures/9200", "MeshFlareParaTexData").Texture2Ds);
             foreach (var signalTrack in root.GetComponentsInChildren<PlayableDirector>(true))
             {
                 var effectManager = signalTrack.gameObject.GetComponent<Sekai.Live.LiveEffectTimelineManager>() ?? signalTrack.gameObject.AddComponent<Sekai.Live.LiveEffectTimelineManager>();
-                effectManager.Setup(false, 0);
+                effectManager.Setup(false, -1);
                 var receiver = signalTrack.gameObject.GetComponent<SignalReceiver>() ?? signalTrack.gameObject.AddComponent<SignalReceiver>();
                 var signal = Assets.Get<SignalAsset>("live_pv/sp/gacha/signal", "GachaSESignal");
                 if (receiver.GetReaction(signal) == null)
@@ -276,45 +266,42 @@ namespace SekaiGacha
             foreach (var text in root.GetComponentsInChildren<TMP_Text>(true)) { text.font = tmpFont; text.text = ""; }
             SetupCameras(root);
         }
-        IEnumerator PlayTimeline(GameObject root, bool intro, double voiceDuration = 0)
+        IEnumerator PlayTimeline(GameObject root, bool intro)
         {
             var director = intro ? root.transform.Find("Timeline").GetComponent<PlayableDirector>() : root.GetComponent<PlayableDirector>();
             CurrentDirector = director;
+            director.Stop();
+            director.extrapolationMode = intro ? DirectorWrapMode.Hold : DirectorWrapMode.None;
             director.time = 0;
-            director.Evaluate();
-            if (director.playableGraph.IsValid()) director.Resume(); else director.Play();
-            double duration = director.duration;
-            if (duration <= 0 || duration > 120) throw new InvalidDataException("抽卡 Timeline 时长异常: " + duration);
-            Debug.Log("GACHA_TIMELINE " + root.name + " duration=" + duration);
-            double start = Time.realtimeSinceStartupAsDouble;
-            while (director.time < duration - .02 || Time.realtimeSinceStartupAsDouble - start < voiceDuration) yield return null;
-            director.Pause();
+            director.Play();
+            Debug.Log("GACHA_TIMELINE " + root.name + " duration=" + director.duration);
+            if (intro)
+            {
+                var loop = ((TimelineAsset)director.playableAsset).GetOutputTracks().OfType<CP.Timeline.LoopTrack>().Single().GetClips().Single();
+                while (director.time <= loop.start) yield return null;
+                // 自动点击代替等待 UI；原 LoopBehaviour 负责调整衔接。
+                director.GetComponent<CP.Timeline.LoopWaitTimeline>().Trigger = true;
+                Audio.PlaySe("SE_GACHA_TAP_3RD_ANV");
+                var state = new GachaSpawnPlayback(root);
+                bool next = false;
+                while (!next)
+                {
+                    state.Execute(() => next = true, Audio.PlaySe);
+                    yield return null;
+                }
+            }
+            else
+            {
+                // 源自 Cpp2CS GachaDisplayState.Execute。
+                while (director.state == PlayState.Playing) yield return null;
+            }
         }
         static void SetCameras(GameObject root, bool enabled)
         {
             foreach (var post in root.GetComponentsInChildren<Sekai.Core.Graphics.PostEffectV2>(true)) post.enabled = enabled;
             foreach (var camera in root.GetComponentsInChildren<Camera>(true)) camera.enabled = enabled;
         }
-        IEnumerator WarmTimeline(GameObject root, bool intro)
-        {
-            var director = intro ? root.transform.Find("Timeline").GetComponent<PlayableDirector>() : root.GetComponent<PlayableDirector>();
-            SetCameras(main, intro);
-            SetCameras(reveal, !intro);
-            director.extrapolationMode = DirectorWrapMode.Hold;
-            director.Play();
-            double duration = director.duration;
-            foreach (double ratio in new[] { 0.0, .2, .4, .6, .8, .98 })
-            {
-                director.time = duration * ratio;
-                director.Evaluate();
-                yield return null;
-                yield return null;
-            }
-            director.Pause();
-            director.time = 0;
-            director.Evaluate();
-            Debug.Log("GACHA_PREWARM " + root.name);
-        }
+
         void OnDestroy()
         {
             if (main) foreach (var director in main.GetComponentsInChildren<PlayableDirector>(true)) director.Stop();
