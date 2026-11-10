@@ -41,7 +41,16 @@ namespace SekaiGacha
         // 原版 ScreenLayerGachaAnimation.tapToStartObj。
         GameObject tapToStart;
         // 原版铺满画面的 screenButton 的一次点击，交给当前状态的 Click 处理。
-        bool pointerDown, clickRequested;
+        bool clickRequested;
+        // 原版 ScreenLayerGachaAnimation.skipButton。
+        GachaSkipButton skipButton;
+        // 按下时落在哪个按钮上：画面（ScreenClickArea）或跳过按钮。
+        enum PressTarget { None, Screen, Skip }
+        PressTarget pressTarget;
+        // 原版 InputManager.intervalStartTime。
+        float intervalStartTime = -1;
+        // 原版 ScreenLayerGachaAnimation 画面是否在显示：从开场等待点击到最后一张卡结束。
+        bool stageShown;
         GameObject main, reveal;
         readonly List<GameObject> effects = new List<GameObject>();
         // 每个槽位预置 ★2/★3/★4 三种特效，按本次结果启用其一。
@@ -84,7 +93,7 @@ namespace SekaiGacha
             fallbackCamera.cullingMask = 0;
             fallbackCamera.GetUniversalAdditionalCameraData().SetRenderer(1);
             fallbackCamera.gameObject.AddComponent<AudioListener>();
-            CreateTapToStart();
+            CreateStageUi();
             Audio = gameObject.AddComponent<GachaAudio>();
             gameObject.AddComponent<GachaEmbed>();
             Assets = new GachaResources();
@@ -101,7 +110,8 @@ namespace SekaiGacha
             phraseMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha2");
             Audio.Initialize();
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
-            Audio.LoadBuiltIn("MenuCommon_Built_in");
+            Audio.LoadSheet("MenuCommon_Built_in");
+            Audio.LoadSheet("BGM_GACHA_SCENE_3RD_ANV");
             yield return LoadCards(catalog);
             main = InstantiateForSetup(Assets.Get<GameObject>("live_pv/sp/gacha/main", "MainTimeline"));
             main.name = "OriginalGachaTimeline";
@@ -188,6 +198,7 @@ namespace SekaiGacha
             SetCameras(reveal, false);
             main.SetActive(true);
             SetCameras(main, true);
+            ShowStage(true);
             Phase = "3D演出";
             // 原版 CreateState：GachaTapWaitState、GachaSpawnAnimationState，再每张卡一个 GachaDisplayState。
             // 开场两段 IsEnableSkip 都为 true，已在跳过模式（下载卡牌期间按了跳过）时由 DequeueNext 直接跳过。
@@ -236,6 +247,10 @@ namespace SekaiGacha
             CurrentDirector.Pause();
             // 原版跳过后各状态 Exit 时卸载语音；这里结束时停掉。
             if (triggerSkip || finishRequested) Audio.Stop();
+            // 原版最后一张 NextState 后离开本画面进入结算画面（OnExited 改放结算画面的 BGM）；这里没有结算画面，
+            // 收起画面上的按钮并停掉抽卡 BGM。
+            ShowStage(false);
+            Audio.StopBgm();
             Phase = "完成";
             busy = false;
             Debug.Log("GACHA_COMPLETE count=" + DrawCount + " voices=" + Audio.VoiceCount + " peak=" + Audio.VoicePeak + " maximumFrameMs=" + MaximumFrameMs + " framesOver100ms=" + SlowFrames);
@@ -243,13 +258,7 @@ namespace SekaiGacha
         }
         void Update()
         {
-            // 原版 screenButton 是铺满画面的按钮（OnClickScreenButton → currentState.Click）；按下后松开算一次点击。
-            if (Input.GetMouseButtonDown(0)) pointerDown = true;
-            if (Input.GetMouseButtonUp(0) && pointerDown)
-            {
-                pointerDown = false;
-                if (busy) clickRequested = true;
-            }
+            HandleInput();
             if (Phase != "3D演出" && Phase != "揭卡") return;
             float ms = Time.unscaledDeltaTime * 1000;
             MaximumFrameMs = Mathf.Max(MaximumFrameMs, ms);
@@ -271,6 +280,8 @@ namespace SekaiGacha
                 catch (Exception error)
                 {
                     Error = error.ToString();
+                    ShowStage(false);
+                    Audio?.StopBgm();
                     Phase = "失败";
                     busy = false;
                     Debug.LogException(error);
@@ -325,6 +336,14 @@ namespace SekaiGacha
                     // 原版 ScreenLayerGachaAnimation.OnPlayTimelineSE：按本次最高稀有度分支。
                     reaction.AddListener(() => Audio.PlaySe(GachaCard.IsTopRarity(maxRarity) ? "SE_GACHA_BRANCH_2_3RD_ANV" : "SE_GACHA_BRANCH_1_3RD_ANV"));
                     receiver.AddReaction(signal, reaction);
+                }
+                // 原版 OnChangeTimelineBGM：时间轴 SignalTrackBGM 上的 SettingAisacBGMValueSignal 把 BGM 的 AISAC 设为 1。
+                var bgmSignal = Assets.Get<SignalAsset>("live_pv/sp/gacha/signal", "SettingAisacBGMValueSignal");
+                if (receiver.GetReaction(bgmSignal) == null)
+                {
+                    var reaction = new UnityEngine.Events.UnityEvent();
+                    reaction.AddListener(() => Audio.SetBgmAisac("BGM_GACHA_SCENE", 1f));
+                    receiver.AddReaction(bgmSignal, reaction);
                 }
                 if (signalTrack.playableAsset is TimelineAsset childTimeline)
                     foreach (var track in childTimeline.GetOutputTracks())
@@ -521,8 +540,11 @@ namespace SekaiGacha
             if (intro)
             {
                 // 原版 GachaTapWaitState：Init 显示 TapToStart，时间轴在 Loop Track 上循环；Execute 什么也不做。
-                // Click：隐藏提示，触发 LoopWaitTimeline，NextState，再播放点击音效（原版还调 BGM 的 AISAC，这里没有 BGM）。
+                // Click：隐藏提示，触发 LoopWaitTimeline，NextState，再播放点击音效。
                 tapToStart.SetActive(true);
+                // Init 末尾：PlayBgm(Gacha3rd)，再把 AISAC 设为 0。
+                Audio.PlayBgm("BGM_GACHA_SCENE_3RD_ANV");
+                Audio.SetBgmAisac("BGM_GACHA_SCENE", 0f);
                 Phase = "等待点击";
                 Debug.Log("GACHA_TAP_WAIT");
                 while (!skipPressed && !finishRequested && !TakeClick()) yield return null;
@@ -534,6 +556,7 @@ namespace SekaiGacha
                 director.GetComponent<CP.Timeline.LoopWaitTimeline>().Trigger = true;
                 var state = new GachaSpawnPlayback(root);
                 Audio.PlaySe("SE_GACHA_TAP_3RD_ANV");
+                Audio.SetBgmAisac("BGM_GACHA_SCENE", 0.5f);
                 // 原版 GachaSpawnAnimationState：Execute 判定时间轴将到末尾（减去 deltaTime）即 NextState；
                 // Click 停掉音效并 NextState。两者都在同一帧隐藏开场、开始揭卡，否则白闪之后会露出一帧 3D 场景。
                 while (!skipPressed && !finishRequested)
@@ -580,17 +603,67 @@ namespace SekaiGacha
                 }
             }
         }
+        // 原版 ScreenClickArea（铺满画面）和 UIPartsSkipButton 都是 CustomButton（se: Decide，interval: Use）。
+        // 按下时显示按下效果；按住移出按钮（OnPointerExit）就取消这次点击；在同一按钮上松开算一次点击：
+        // CheckPointerClickAction 先过 InputManager 的 0.2 秒间隔检查，通过后 PlaySEOneShot("SE_DECIDE1")，
+        // 再执行 onClick（OnClickScreenButton → currentState.Click，或 OnClickSkipButton）。
+        // 跳过按钮压在 ScreenClickArea 之上，按在它上面不算点画面。
+        void HandleInput()
+        {
+            Vector2 point = Input.mousePosition;
+            if (Input.GetMouseButtonDown(0) && stageShown)
+            {
+                pressTarget = skipButton.Contains(point) ? PressTarget.Skip : PressTarget.Screen;
+                if (pressTarget == PressTarget.Skip) skipButton.Press();
+            }
+            if (pressTarget == PressTarget.Skip && !skipButton.Contains(point))
+            {
+                skipButton.Release();
+                pressTarget = PressTarget.None;
+            }
+            if (Input.GetMouseButtonUp(0) && pressTarget != PressTarget.None)
+            {
+                var target = pressTarget;
+                pressTarget = PressTarget.None;
+                if (target == PressTarget.Skip) skipButton.Release();
+                if (stageShown && !IntervalBlocked())
+                {
+                    Audio.PlaySe("SE_DECIDE1");
+                    if (target == PressTarget.Skip) Skip();
+                    else clickRequested = true;
+                }
+            }
+            // 原版 ScreenLayerGachaAnimation.Update：按 Esc 直接调 OnClickSkipButton。
+            if (stageShown && Input.GetKeyDown(KeyCode.Escape)) Skip();
+        }
+        // 原版 InputManager.CheckAndResetIntervalTime（IntervalUseType.Use）：距上次点击不足 0.2 秒则忽略。
+        bool IntervalBlocked()
+        {
+            if (Time.realtimeSinceStartup - intervalStartTime < 0.2f) return true;
+            intervalStartTime = Time.realtimeSinceStartup;
+            return false;
+        }
+        void ShowStage(bool shown)
+        {
+            stageShown = shown;
+            skipButton.gameObject.SetActive(shown);
+            if (shown) return;
+            tapToStart.SetActive(false);
+            pressTarget = PressTarget.None;
+            clickRequested = false;
+        }
         bool TakeClick()
         {
             bool click = clickRequested;
             clickRequested = false;
             return click;
         }
-        // 原版 ScreenLayerGachaAnimation 的 TapToStart：1920×1080 画布底部居中上移 200，486×56 的 txt_taptostart，
-        // 带 TweenAlpha。贴图从原版 GachaAtlas 按该精灵的矩形裁出。
-        void CreateTapToStart()
+        // 原版 ScreenLayerGachaAnimation/ComponentRoot/SafeArea 下的两个界面元素，按原版顺序先跳过按钮、后 TapToStart。
+        // TapToStart：1920×1080 画布底部居中上移 200，486×56 的 txt_taptostart，带 TweenAlpha。
+        // 贴图都从原版图集（GachaAtlas、CommonAtlas）按精灵矩形裁出。
+        void CreateStageUi()
         {
-            var canvas = new GameObject("TapToStartCanvas", typeof(Canvas), typeof(CanvasScaler)).GetComponent<Canvas>();
+            var canvas = new GameObject("GachaStageCanvas", typeof(Canvas), typeof(CanvasScaler)).GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 100;
             var scaler = canvas.GetComponent<CanvasScaler>();
@@ -599,6 +672,8 @@ namespace SekaiGacha
             scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
             scaler.matchWidthOrHeight = 0;
             DontDestroyOnLoad(canvas.gameObject);
+            skipButton = GachaSkipButton.Create(canvas.transform);
+            skipButton.gameObject.SetActive(false);
             tapToStart = new GameObject("TapToStart", typeof(RectTransform), typeof(RawImage));
             var rect = (RectTransform)tapToStart.transform;
             rect.SetParent(canvas.transform, false);

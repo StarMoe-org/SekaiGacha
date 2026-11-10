@@ -25,7 +25,8 @@
     //       可选 prefix、phrase 取主数据 prefix（卡名）和 gachaPhrase（招募台词），按纯文本显示，各至多 64 字；
     //       ★2 只显示卡名
     //   { type: "sekai-gacha:skip" }                                 与原版跳过相同：跳过开场和可跳的卡，停在下一张 ★4、生日卡或新获得的 ★3；
-    //                                                                此后一直处于跳过模式，没有剩下的卡时结束
+    //                                                                此后一直处于跳过模式，没有剩下的卡时结束。画面右上角有原版的跳过按钮
+    //                                                                （tap / intro / reveal 期间一直显示），宿主不必再放；宿主的控件别盖住画面右上角
     //   { type: "sekai-gacha:finish" }                               立即结束（宿主关闭页面时用），停在最后一张卡的结束画面
     //   { type: "sekai-gacha:mute", muted: true }                    静音或恢复
     //
@@ -34,7 +35,8 @@
     //   { type: "sekai-gacha:state", v: 1, phase, revealed, total, card?, client?, error? }
     //     phase: booting | ready | loading（下载卡面和语音）| tap（开场停在循环段，画面显示 TAP TO START，等用户点击画面）
     //            | intro（开场）| reveal（揭卡，card 为当前卡）| complete | error
-    //     与原版相同，点击画面推进演出：tap 时开始，intro 时直接进入揭卡，reveal 时先跳到该卡的末尾展示段、再点进入下一张
+    //     与原版相同，点击画面推进演出：tap 时开始，intro 时直接进入揭卡，reveal 时先跳到该卡的末尾展示段、再点进入下一张；
+    //     按 Esc 与点跳过按钮相同
     //   { type: "sekai-gacha:error", v: 1, code, message }           单条指令被拒绝：busy | invalid_cards | invalid_message
     //
     // 浏览器只在用户与页面交互后允许播放声音；宿主需在 iframe 上委托 autoplay，或让用户先点击 iframe。
