@@ -288,6 +288,9 @@ static class Program
         var prizes = lottery.Spin(lottery.DefaultTenPullBehavior(), new SystemRandomSource(1));
         Check(prizes.Length == 10, "十连应有 10 张");
         Check(prizes.All(p => System.Text.RegularExpressions.Regex.IsMatch(p.Card.assetbundleName ?? "", @"^res\d+_no\d+$")), "资源名应能交给 GachaApp.PlayCards");
+        var units = pool.gameCharacters.ToDictionary(c => c.id, c => c.unit);
+        Check(pool.cards.All(c => units.ContainsKey(c.characterId)), "卡池文件应包含所有角色的单位（★2 背景）");
+        Check(pool.cards.All(c => c.gachaPhrase != null && c.initialSpecialTrainingStatus != null), "卡池文件应包含 gachaPhrase / initialSpecialTrainingStatus");
         Console.WriteLine($"    {pool.gacha.id} {pool.gacha.name}：" + string.Join(" ", prizes.Select(p => p.Card.assetbundleName + "(" + p.Card.cardRarityType.Replace("rarity_", "★") + ")")));
     }
 

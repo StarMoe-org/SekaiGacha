@@ -15,7 +15,7 @@ namespace SekaiGacha
         GCHandle acf;
         GameObject criRoot;
         public int VoiceCount { get; private set; }
-        // 资源清单中没有获得语音的揭卡次数。
+        // 揭卡时没有语音的次数（★2，或资源清单中没有获得语音）。
         public int MissingVoiceCount { get; private set; }
         public float VoicePeak { get; private set; }
         public bool Muted { get; set; }
@@ -52,6 +52,10 @@ namespace SekaiGacha
             se.SetCue(sheet, cue);
             se.Start();
         }
+        // SoundManager.StopSEAll
+        public void StopSe() => se?.Stop();
+        // ★2 揭卡没有语音（GachaDisplayState 不调用 SetupVoice）。
+        public void CountNoVoice() => MissingVoiceCount++;
         public double PlayVoice(string card)
         {
             string bundle = "sound/gacha/get_voice/" + card;

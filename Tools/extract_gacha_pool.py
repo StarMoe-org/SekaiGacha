@@ -2,7 +2,7 @@
 """从 master 数据提取单个卡池，生成 Unity 读取的 GachaPool.json。
 
 master 数据来自 Team-Haruki/haruki-sekai-master（与 Moesekai 相同的数据源）：
-    python3 Tools/extract_gacha_pool.py --fetch            # 下载 gachas.json / cards.json 到 Cache/master，并同步资源版本
+    python3 Tools/extract_gacha_pool.py --fetch            # 下载 gachas.json / cards.json / gameCharacters.json 到 Cache/master，并同步资源版本
     python3 Tools/extract_gacha_pool.py --list             # 列出最近的卡池
     python3 Tools/extract_gacha_pool.py --gacha-id 4054    # 写入 UnityProject/Assets/Resources/GachaPool.json
 
@@ -23,7 +23,7 @@ RESOURCE_VERSION = os.path.join(ROOT, "UnityProject", "Assets", "Resources", "Re
 GACHA_RESOURCES = os.path.join(ROOT, "UnityProject", "Assets", "Scripts", "GachaResources.cs")
 MASTER_URL = "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/master/"
 VERSION_URL = "https://raw.githubusercontent.com/Team-Haruki/haruki-sekai-master/main/versions/current_version.json"
-MASTER_FILES = ("gachas.json", "cards.json")
+MASTER_FILES = ("gachas.json", "cards.json", "gameCharacters.json")
 
 GACHA_FIELDS = ("id", "gachaType", "name", "startAt", "endAt", "wishSelectCount", "wishFixedSelectCount",
                 "wishLimitedSelectCount", "rateChoiceGachaWishGroupId")
@@ -32,7 +32,8 @@ BEHAVIOR_FIELDS = ("id", "gachaId", "groupId", "priority", "gachaBehaviorType", 
 RATE_FIELDS = ("id", "cardRarityType", "lotteryType", "rate")
 DETAIL_FIELDS = ("id", "gachaId", "cardId", "weight", "isWish", "gachaDetailWishType")
 PICKUP_FIELDS = ("id", "gachaId", "cardId", "gachaPickupType")
-CARD_FIELDS = ("id", "characterId", "cardRarityType", "assetbundleName", "prefix")
+CARD_FIELDS = ("id", "characterId", "cardRarityType", "assetbundleName", "prefix", "gachaPhrase", "initialSpecialTrainingStatus")
+CHARACTER_FIELDS = ("id", "unit")
 
 
 def pick(obj, fields):
@@ -107,7 +108,7 @@ def list_gachas(gachas, count):
                                                ",".join(sorted(set(tens))) or "无十连", gacha["name"]))
 
 
-def extract(gachas, cards, gacha_id):
+def extract(gachas, cards, characters, gacha_id):
     gacha = next((g for g in gachas if g["id"] == gacha_id), None)
     if gacha is None:
         sys.exit("找不到卡池 %d" % gacha_id)
@@ -121,13 +122,15 @@ def extract(gachas, cards, gacha_id):
     out["gachaCardRarityRates"] = [pick(r, RATE_FIELDS) for r in gacha["gachaCardRarityRates"]]
     out["gachaDetails"] = [pick(d, DETAIL_FIELDS) for d in gacha["gachaDetails"]]
     out["gachaPickups"] = [pick(p, PICKUP_FIELDS) for p in gacha["gachaPickups"]]
-    return {"gacha": out, "cards": [pick(card_map[i], CARD_FIELDS) for i in sorted(detail_ids)]}
+    character_ids = {card_map[i]["characterId"] for i in detail_ids}
+    return {"gacha": out, "cards": [pick(card_map[i], CARD_FIELDS) for i in sorted(detail_ids)],
+            "gameCharacters": [pick(c, CHARACTER_FIELDS) for c in characters if c["id"] in character_ids]}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--master", default=DEFAULT_MASTER, help="master 目录（默认 Cache/master）")
-    parser.add_argument("--fetch", action="store_true", help="先从 Haruki 下载 gachas.json / cards.json，并同步 ResourceVersion.json")
+    parser.add_argument("--fetch", action="store_true", help="先从 Haruki 下载 gachas.json / cards.json / gameCharacters.json，并同步 ResourceVersion.json")
     parser.add_argument("--list", nargs="?", const=20, type=int, metavar="N", help="列出最近 N 个卡池（默认 20）")
     parser.add_argument("--gacha-id", type=int, help="要提取的卡池 id")
     parser.add_argument("--out", default=DEFAULT_OUT, help="输出路径（默认 Resources/GachaPool.json）")
@@ -143,7 +146,7 @@ def main():
     if args.list is not None:
         list_gachas(gachas, args.list)
     if args.gacha_id is not None:
-        pool = extract(gachas, load(args.master, "cards.json"), args.gacha_id)
+        pool = extract(gachas, load(args.master, "cards.json"), load(args.master, "gameCharacters.json"), args.gacha_id)
         gacha = pool["gacha"]
         if "不支持" in kind(gacha):
             print("警告：卡池 %d 是%s，GachaLottery 会拒绝加载" % (gacha["id"], kind(gacha)), file=sys.stderr)

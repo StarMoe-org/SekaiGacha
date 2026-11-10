@@ -10,6 +10,8 @@ namespace SekaiGacha.Simulation
     {
         public MasterGacha gacha;
         public List<MasterCard> cards = new List<MasterCard>();
+        // 揭卡演出用：★2 卡背景按角色所属单位选择（GachaDisplayState.SetupBackground）。
+        public List<MasterGameCharacter> gameCharacters = new List<MasterGameCharacter>();
     }
 
     public sealed class MasterGacha
@@ -74,5 +76,13 @@ namespace SekaiGacha.Simulation
         public string cardRarityType;
         public string assetbundleName;
         public string prefix;
+        public string gachaPhrase;
+        public string initialSpecialTrainingStatus;
+    }
+
+    public sealed class MasterGameCharacter
+    {
+        public int id;
+        public string unit;
     }
 }

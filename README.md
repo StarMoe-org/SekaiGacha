@@ -19,7 +19,9 @@ python3 Tools/extract_gacha_pool.py --gacha-id 4054    # 生成 Resources/GachaP
 - 自选卡池（`wishSelectCount`）的 ★4 只从选中卡中等概率抽出；默认选择先选 UP 卡，再按卡池顺序补满。
 - 暂不支持 Dream Pick（分类 wish）与概率自选（rate choice）卡池，加载时报错；也未实现抽卡积分、天井兑换。
 
-演出目前对所有稀有度都使用 ★4 演出；没有获得语音资源的卡只显示卡面。
+揭卡演出按逆向的 `ScreenLayerGachaAnimation` 状态机移植（`Assets/Scripts/GachaAnimationStates.cs`）：奖品槽、预兆特效与揭卡特效按稀有度选择，★3 以上显示卡名与台词并播放获得语音，★2 使用小卡面与单位背景。点击画面等同原版全屏按钮（揭卡时跳到末尾 2 秒，再点进入下一张），Esc 等同跳过按钮（跳过 ★2 与非新卡 ★3）。开场等待点击的循环段默认自动点击（`GachaApp.AutoTap`）。
+
+未接入：抽完后的结算界面 `ScreenLayerGachaResult`（UI 预制体在安装包内置资源中，不在 CDN 资源包里）、BGM；演出结束后停在最后一张卡。
 
 测试（Unity 外，需 .NET SDK；核心按 .NET Standard 2.1 / C# 9 编译，与 Unity 2022.3 一致）：
 

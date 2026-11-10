@@ -156,6 +156,26 @@ namespace SekaiGacha
             if (result is GameObject prefab) Rebind(prefab);
             return result;
         }
+        public bool TryGet<T>(string bundle, string name, out T asset) where T : UnityEngine.Object
+        {
+            try { asset = Get<T>(bundle, name); return true; }
+            catch (InvalidDataException) { asset = null; return false; }
+            catch (KeyNotFoundException) { asset = null; return false; }
+        }
+        // AssetBundleLoader.LoadResourceMultipleSprite：按名称取多图精灵中的子精灵。
+        public T GetSubAsset<T>(string bundle, string assetName, string subName) where T : UnityEngine.Object
+        {
+            if (offline) return Get<T>(bundle, subName);
+            var value = loaded[bundle];
+            T result = value.LoadAssetWithSubAssets<T>(assetName).FirstOrDefault(a => a.name == subName);
+            if (!result)
+            {
+                string path = value.GetAllAssetNames().FirstOrDefault(p => Path.GetFileNameWithoutExtension(p).Equals(assetName, StringComparison.OrdinalIgnoreCase));
+                if (path != null) result = value.LoadAssetWithSubAssets<T>(path).FirstOrDefault(a => a.name == subName);
+            }
+            if (!result) throw new InvalidDataException("资源缺失 " + bundle + "/" + assetName + "/" + subName);
+            return result;
+        }
         public T[] All<T>(string bundle) where T : UnityEngine.Object => offline ? offline.entries.Where(e => e.bundle == bundle).Select(e => e.asset).OfType<T>().Distinct().ToArray() : loaded[bundle].LoadAllAssets<T>();
         // 离线（WebGL）时只含预先打包的资源。
         public bool IsOffline => offline;

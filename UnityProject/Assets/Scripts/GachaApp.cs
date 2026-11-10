@@ -16,15 +16,13 @@ namespace SekaiGacha
 {
     public sealed class GachaApp : MonoBehaviour
     {
-        // 原版 GachaDisplayState.WaitTime，真机只读核对为 2 秒。
-        const double CardEndWaitSeconds = 2;
         public static GachaApp Instance { get; private set; }
         public string Phase { get; private set; } = "加载";
         public string Error { get; private set; }
         public int RevealedCount { get; private set; }
         public int DrawCount { get; private set; }
         public string[] CurrentResults { get; private set; }
-        public PlayableDirector CurrentDirector { get; private set; }
+        public PlayableDirector CurrentDirector { get; internal set; }
         public GachaAudio Audio { get; private set; }
         public GachaResources Assets { get; private set; }
         // Resources/GachaPool.json 存在时加载的卡池；否则为 null，沿用 CardCatalog 随机演示。
@@ -33,13 +31,33 @@ namespace SekaiGacha
         public float MaximumFrameMs { get; private set; }
         public int SlowFrames { get; private set; }
         public event Action PlaybackCompleted;
+        // 自动演示：TapWait 到循环段时代替点击（原版等待玩家点击 TAP 提示）。
+        public bool AutoTap { get; set; } = true;
+        // ScreenLayerGachaAnimation.Effects / LoadedMaterial 的对应物。
+        internal readonly Dictionary<GachaEffectType, GameObject> Effects = new Dictionary<GachaEffectType, GameObject>();
+        internal TMP_FontAsset GachaFont { get; private set; }
+        internal Material UnitNameMaterial { get; private set; }
+        internal Material SerifMaterial { get; private set; }
+        // ScreenLayerGachaAnimation.effectFileNames
+        static readonly KeyValuePair<GachaEffectType, string>[] effectFileNames =
+        {
+            new KeyValuePair<GachaEffectType, string>(GachaEffectType.CardR2, "fx_gacha_card_r2_01"),
+            new KeyValuePair<GachaEffectType, string>(GachaEffectType.CardR3, "fx_gacha_card_r3_01"),
+            new KeyValuePair<GachaEffectType, string>(GachaEffectType.CardR4, "fx_gacha_card_r4_01"),
+            new KeyValuePair<GachaEffectType, string>(GachaEffectType.Birthday, "fx_gacha_card_birthday_01"),
+            new KeyValuePair<GachaEffectType, string>(GachaEffectType.CardR3AfterTraning, "fx_gacha_card_r3_afterTraining_01"),
+            new KeyValuePair<GachaEffectType, string>(GachaEffectType.CardR4AfterTraning, "fx_gacha_card_r4_afterTraining_01"),
+        };
         TMP_FontAsset tmpFont;
         Camera fallbackCamera;
-        GameObject main, reveal;
-        readonly List<GameObject> effects = new List<GameObject>();
-        readonly List<GameObject> prizeSlots = new List<GameObject>();
-        readonly Dictionary<string, Sprite> cards = new Dictionary<string, Sprite>();
-        bool busy;
+        GameObject main;
+        readonly Dictionary<string, GachaCardInfo> cardInfos = new Dictionary<string, GachaCardInfo>();
+        readonly Dictionary<string, Sprite> stills = new Dictionary<string, Sprite>();
+        readonly HashSet<string> obtained = new HashSet<string>();
+        Queue<IGachaState> states;
+        IGachaState currentState;
+        GachaCardRarity maxRarity;
+        bool triggerSkip, finished, busy;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (!FindObjectOfType<GachaApp>()) new GameObject("SekaiGacha").AddComponent<GachaApp>(); }
@@ -62,7 +80,10 @@ namespace SekaiGacha
         }
         IEnumerator Initialize()
         {
-            var catalog = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"].Select(c => (string)c["id"]).ToArray();
+            var catalogCards = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"];
+            foreach (var c in catalogCards)
+                cardInfos[(string)c["id"]] = new GachaCardInfo { AssetbundleName = (string)c["id"], CharacterId = (int)c["characterId"], Rarity = (GachaCardRarity)(int)c["rarity"], GachaPhrase = (string)c["phrase"] ?? "" };
+            var catalog = catalogCards.Select(c => (string)c["id"]).ToArray();
             GachaPrize[] firstPrizes = null;
             var poolAsset = Resources.Load<TextAsset>("GachaPool");
             // 离线（WebGL）资源只含 CardCatalog 的卡，抽到其他卡会缺资源，因此只在在线模式使用卡池。
@@ -71,6 +92,14 @@ namespace SekaiGacha
             {
                 // 卡池由 Tools/extract_gacha_pool.py 生成；首个十连用卡池模拟，只加载本次抽到的卡。
                 var pool = JsonConvert.DeserializeObject<GachaPool>(poolAsset.text);
+                var units = pool.gameCharacters.ToDictionary(c => c.id, c => c.unit);
+                foreach (var card in pool.cards)
+                    cardInfos[card.assetbundleName] = new GachaCardInfo
+                    {
+                        AssetbundleName = card.assetbundleName, CharacterId = card.characterId, Rarity = GachaCardInfo.ParseRarity(card.cardRarityType),
+                        Prefix = card.prefix ?? "", GachaPhrase = card.gachaPhrase ?? "", IsOnlyAfterTraining = card.initialSpecialTrainingStatus == "done",
+                        Unit = units.TryGetValue(card.characterId, out var unit) ? unit : null,
+                    };
                 Lottery = new GachaLottery(pool, GachaLottery.DefaultWishSelection(pool));
                 firstPrizes = Draw(Lottery.DefaultTenPullBehavior());
                 catalog = Names(firstPrizes).Distinct().ToArray();
@@ -79,15 +108,39 @@ namespace SekaiGacha
             yield return Assets.Load("live_pv/sp/gacha/main", "live_pv/sp/gacha/signal", "effect_asset/gacha_obtain_prize", "gacha/sound/se/se_gacha", "character/label", "live_pv/model/mesh_flare_para/textures/9200");
             Audio.Initialize();
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
-            yield return LoadCards(catalog);
+            yield return LoadCards(catalog.Select(CardInfo));
+            // ScreenLayerGachaAnimation.Load：Font/FOT-RodinNTLGPro-EB SDF_Base 与 Gacha / Gacha2 材质（资源包内同名资源）。
+            // 材质引用字体图集，只与资源包中的字体搭配；取不到字体（如 WebGL 离线目录）时整体退回本地字体。
+            if (Assets.TryGet("effect_asset/gacha_obtain_prize", "FOT-RodinNTLGPro-EB SDF_Base", out TMP_FontAsset font))
+            {
+                GachaFont = font;
+                UnitNameMaterial = Assets.TryGet("effect_asset/gacha_obtain_prize", "FOT-RodinNTLGPro-EB SDF_Base Gacha", out Material unitName) ? unitName : font.material;
+                SerifMaterial = Assets.TryGet("effect_asset/gacha_obtain_prize", "FOT-RodinNTLGPro-EB SDF_Base Gacha2", out Material serif) ? serif : font.material;
+            }
+            else
+            {
+                GachaFont = tmpFont;
+                UnitNameMaterial = SerifMaterial = tmpFont.material;
+            }
+            if (GachaFont != tmpFont)
+            {
+                if (GachaFont.fallbackFontAssetTable == null) GachaFont.fallbackFontAssetTable = new List<TMP_FontAsset>();
+                if (!GachaFont.fallbackFontAssetTable.Contains(tmpFont)) GachaFont.fallbackFontAssetTable.Add(tmpFont);
+            }
             main = InstantiateForSetup(Assets.Get<GameObject>("live_pv/sp/gacha/main", "MainTimeline"));
             main.name = "OriginalGachaTimeline";
-            PrepareMain(main, 10);
-            reveal = InstantiateForSetup(Assets.Get<GameObject>("effect_asset/gacha_obtain_prize", "fx_gacha_card_r4_01"));
-            effects.Add(reveal);
-            SetupReveal(reveal, cards[catalog[0]], CharacterId(catalog[0]));
+            PrepareMain(main);
+            Effects[GachaEffectType.Main] = main;
             SetCameras(main, false);
-            SetCameras(reveal, false);
+            foreach (var pair in effectFileNames)
+            {
+                var effect = InstantiateForSetup(Assets.Get<GameObject>("effect_asset/gacha_obtain_prize", pair.Value));
+                effect.name = pair.Value;
+                SetupCameras(effect);
+                SetCameras(effect, false);
+                effect.SetActive(false);
+                Effects[pair.Key] = effect;
+            }
             // 装载结束后跨过当前帧，避免初始化耗时进入演出的首帧时钟。
             yield return null;
             yield return new WaitForEndOfFrame();
@@ -126,76 +179,157 @@ namespace SekaiGacha
             foreach (var director in prefab.GetComponentsInChildren<PlayableDirector>(true)) director.playOnAwake = false;
             return Instantiate(prefab);
         }
-        static int CharacterId(string card) => int.Parse(card.Substring(3, card.IndexOf('_') - 3));
-        IEnumerator LoadCards(IEnumerable<string> results)
+        GachaCardInfo CardInfo(string card)
         {
-            foreach (string id in results.Distinct())
+            if (!cardInfos.TryGetValue(card, out var info)) throw new ArgumentException("没有卡牌数据 " + card + "（不在 GachaPool.json / CardCatalog.json 中）");
+            return info;
+        }
+        internal Sprite MemberStill(string card, string fileName)
+        {
+            string key = card + "/" + fileName;
+            if (stills.TryGetValue(key, out var sprite)) return sprite;
+            var texture = Assets.Get<Texture2D>("character/member/" + card, fileName);
+            sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f));
+            stills.Add(key, sprite);
+            return sprite;
+        }
+        // GachaDisplayState 用到的资源包：★2 为 member_gacha + unit_background，★3 以上为 member + 获得语音。
+        IEnumerator LoadCards(IEnumerable<GachaCardInfo> results)
+        {
+            foreach (var info in results.Distinct())
             {
-                if (cards.ContainsKey(id)) continue;
-                if (!Assets.Has("character/member/" + id))
-                    throw new InvalidDataException("资源版本 " + Assets.AssetVersion + " 中没有卡牌 " + id + "（卡池数据比资源版本新），运行 python3 Tools/extract_gacha_pool.py --fetch 更新 ResourceVersion.json");
-                // 卡池模拟会抽到 ★2/★3；资源清单里没有获得语音的卡只显示卡面，不播语音。
+                string id = info.AssetbundleName;
+                var bundles = new List<string>();
+                if (info.Rarity == GachaCardRarity.rarity_2) { bundles.Add("character/member_gacha/" + id); bundles.Add("unit_background"); }
+                else bundles.Add("character/member/" + id);
+                foreach (string bundle in bundles)
+                    if (!Assets.Has(bundle))
+                        throw new InvalidDataException("资源版本 " + Assets.AssetVersion + " 中没有 " + bundle + "（卡池数据比资源版本新），运行 python3 Tools/extract_gacha_pool.py --fetch 更新 ResourceVersion.json");
                 string voice = "sound/gacha/get_voice/" + id;
-                if (Assets.Has(voice))
-                {
-                    yield return Assets.Load("character/member/" + id, voice);
-                    Audio.Load(Assets, voice);
-                }
-                else
-                {
-                    Debug.LogWarning("GACHA_NO_VOICE " + id);
-                    yield return Assets.Load("character/member/" + id);
-                }
-                var texture = Assets.Get<Texture2D>("character/member/" + id, "card_normal");
-                cards.Add(id, Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f)));
+                bool hasVoice = info.Rarity != GachaCardRarity.rarity_2 && Assets.Has(voice);
+                if (hasVoice) bundles.Add(voice);
+                else if (info.Rarity != GachaCardRarity.rarity_2) Debug.LogWarning("GACHA_NO_VOICE " + id);
+                yield return Assets.Load(bundles.ToArray());
+                if (hasVoice) Audio.Load(Assets, voice);
             }
         }
-        // 接收上层给出的结果；当前只播放四星演出，不执行账号或真实抽卡请求。
+        // 接收上层给出的结果（卡牌资源名），按原版 ScreenLayerGachaAnimation 的状态队列播放。
         public void PlayCards(string[] results)
         {
             if (busy || (Phase != "就绪" && Phase != "完成")) throw new InvalidOperationException("演出正在进行");
             if (results == null || results.Length < 1 || results.Length > 10 || results.Any(id => !System.Text.RegularExpressions.Regex.IsMatch(id ?? "", @"^res\d+_no\d+$")))
                 throw new ArgumentException("需要 1 至 10 个有效卡牌资源名", nameof(results));
+            var infos = results.Select(CardInfo).ToArray();
             CurrentResults = (string[])results.Clone();
             CurrentPrizes = null;
+            // newFlg 由服务端给出；模拟时按本次运行中是否首次获得。
+            var prizes = infos.Select(info =>
+            {
+                var prize = new GachaCardInfo
+                {
+                    AssetbundleName = info.AssetbundleName, CharacterId = info.CharacterId, Rarity = info.Rarity, Prefix = info.Prefix,
+                    GachaPhrase = info.GachaPhrase, IsOnlyAfterTraining = info.IsOnlyAfterTraining, Unit = info.Unit, IsNew = obtained.Add(info.AssetbundleName),
+                };
+                return prize;
+            }).ToArray();
             busy = true;
-            StartCoroutine(Guard(Play()));
+            StartCoroutine(Guard(Play(prizes)));
         }
-        IEnumerator Play()
+        IEnumerator Play(GachaCardInfo[] prizes)
         {
             Phase = "加载";
-            yield return LoadCards(CurrentResults);
-            DrawCount = CurrentResults.Length;
+            yield return LoadCards(prizes);
+            DrawCount = prizes.Length;
             RevealedCount = 0;
             MaximumFrameMs = 0;
             SlowFrames = 0;
-            for (int i = 0; i < prizeSlots.Count; i++) prizeSlots[i].SetActive(i < DrawCount);
+            maxRarity = prizes.Max(p => p.Rarity);
+            // ScreenLayerGachaAnimation.CreateState
+            states = new Queue<IGachaState>();
+            states.Enqueue(new GachaTapWaitState(prizes));
+            states.Enqueue(new GachaSpawnAnimationState());
+            foreach (var prize in prizes) states.Enqueue(new GachaDisplayState(prize));
+            currentState = null;
+            triggerSkip = false;
+            finished = false;
             fallbackCamera.enabled = false;
-            SetCameras(reveal, false);
-            main.SetActive(true);
-            SetCameras(main, true);
             Phase = "3D演出";
-            yield return PlayTimeline(main, true);
-            main.SetActive(false);
-            foreach (string card in CurrentResults)
+            NextState();
+            while (!finished)
             {
-                SetupReveal(reveal, cards[card], CharacterId(card));
-                SetCameras(main, false);
-                SetCameras(reveal, true);
-                Phase = "揭卡";
-                Audio.PlayVoice(card);
-                RevealedCount++;
-                Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card);
-                yield return PlayTimeline(reveal, false);
+                // ScreenLayerGachaAnimation：全屏按钮 → currentState.Click；Escape → OnClickSkipButton。
+                if (Input.GetKeyDown(KeyCode.Escape)) OnClickSkipButton();
+                else if (Input.GetMouseButtonDown(0)) currentState?.Click(this);
+                if (!finished) currentState?.Execute(this);
+                yield return null;
             }
-            // 无结算界面时停留在原版点击跳转使用的末尾展示段。
-            CurrentDirector.time = Math.Max(0, CurrentDirector.duration - CardEndWaitSeconds);
-            CurrentDirector.Evaluate();
-            CurrentDirector.Pause();
             Phase = "完成";
             busy = false;
-            Debug.Log("GACHA_COMPLETE count=" + DrawCount + " voices=" + Audio.VoiceCount + " peak=" + Audio.VoicePeak + " maximumFrameMs=" + MaximumFrameMs + " framesOver100ms=" + SlowFrames);
+            Debug.Log("GACHA_COMPLETE count=" + DrawCount + " revealed=" + RevealedCount + " voices=" + Audio.VoiceCount + " peak=" + Audio.VoicePeak + " maximumFrameMs=" + MaximumFrameMs + " framesOver100ms=" + SlowFrames);
             PlaybackCompleted?.Invoke();
+        }
+        void OnClickSkipButton()
+        {
+            Audio.PlaySe("SE_DECIDE1");
+            triggerSkip = true;
+            Audio.StopSe();
+            NextState();
+        }
+        // ScreenLayerGachaAnimation.NextState / DequeueNext
+        internal void NextState()
+        {
+            if (states != null && states.Count >= 1)
+            {
+                currentState?.Exit(this);
+                if (!DequeueNext(out currentState)) OnFinished(null);
+                else currentState.Init(this);
+            }
+            else OnFinished(currentState);
+        }
+        bool DequeueNext(out IGachaState nextState)
+        {
+            nextState = states.Dequeue();
+            if (triggerSkip)
+            {
+                while (nextState.IsEnableSkip)
+                {
+                    nextState.Exit(this);
+                    if (states.Count != 0)
+                    {
+                        nextState = states.Dequeue();
+                        if (!triggerSkip) break;
+                        continue;
+                    }
+                    return false;
+                }
+            }
+            return true;
+        }
+        // 原版转到 GachaResult 结算界面（安装包内置 UI，未接入）；这里停在最后一张卡的末尾展示段。
+        void OnFinished(IGachaState last)
+        {
+            if (finished) return;
+            finished = true;
+            (last as GachaDisplayState)?.Hold();
+            currentState = null;
+        }
+        internal void OnReveal(GachaCardInfo card)
+        {
+            Phase = "揭卡";
+            RevealedCount++;
+            Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card.AssetbundleName + " " + card.Rarity + (card.IsNew ? " new" : ""));
+        }
+        internal void ShowEffect(GameObject effect)
+        {
+            SetCameras(effect, true);
+            effect.SetActive(true);
+        }
+        // 运行时实例化到已配置对象下的预制体，沿用所在演出的图层与音效回调。
+        internal void PrepareSpawned(GameObject root, GameObject spawned)
+        {
+            foreach (var node in spawned.GetComponentsInChildren<Transform>(true)) node.gameObject.layer = root.layer;
+            foreach (var animator in spawned.GetComponentsInChildren<Animator>(true)) animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+            foreach (var se in spawned.GetComponentsInChildren<Sekai.AnimationClipSoundEvent>(true)) se.OnPlaySeAction = Audio.PlaySe;
         }
         void Update()
         {
@@ -229,37 +363,12 @@ namespace SekaiGacha
                 else yield return value;
             }
         }
-        void PrepareMain(GameObject root, int count)
+        void PrepareMain(GameObject root)
         {
             var director = root.transform.Find("Timeline").GetComponent<PlayableDirector>();
             director.Stop();
             director.playOnAwake = false;
-            var timeline = (TimelineAsset)director.playableAsset;
-            string[] slots = { "rot_10/10", "rot_g/rot_move/pos_rot_09/sub_rot/09", "rot_g/rot_move/pos_rot_08/sub_rot/08", "rot_g/rot_move/pos_rot_07/sub_rot/07", "rot_g/rot_move/pos_rot_06/sub_rot/06", "rot_g/rot_move/pos_rot_05/sub_rot/05", "rot_g/rot_move/pos_rot_04/sub_rot/04", "rot_g/rot_move/pos_rot_03/sub_rot/03", "rot_g/rot_move/pos_rot_02/sub_rot/02", "rot_g/rot_move/pos_rot_01/sub_rot/01" };
-            var prizeRoot = root.transform.Find("gatya/root");
-            for (int i = 0; i < slots.Length; i++)
-            {
-                var slot = prizeRoot.Find(slots[i]);
-                foreach (Transform child in slot) Destroy(child.gameObject);
-                prizeSlots.Add(Instantiate(Assets.Get<GameObject>("live_pv/sp/gacha/effect", "eff_9200_gatya_r04"), slot, false));
-            }
-            var effectRoot = root.transform.Find("Effect");
-            foreach (Transform child in effectRoot) child.gameObject.SetActive(false);
-            var omoi = effectRoot.Find("eff_9200_omoi_r04");
-            foreach (var track in timeline.GetOutputTracks())
-            {
-                if (track.name == "OmoiEffect") director.SetGenericBinding(track, omoi.gameObject);
-                if (track.name == "OmoiAnimation") director.SetGenericBinding(track, omoi.GetComponent<Animator>() ?? omoi.gameObject.AddComponent<Animator>());
-                if (track.name == "Light")
-                    foreach (var clip in track.GetClips())
-                        if (clip.displayName == "gatya_light" && clip.asset is AnimationPlayableAsset animation) animation.clip = Assets.Get<AnimationClip>("live_pv/sp/gacha/timeline", "gatya_light_9100_p");
-                if (track.name == "eff_9200_hansya_gosen_r02")
-                    foreach (var clip in track.GetClips())
-                        if (clip.displayName == "eff_9200_hansya_gosen_r02" && clip.asset is LiveEffectClip effect) effect.template.prefab = Assets.Get<GameObject>("live_pv/sp/gacha/effect", "eff_9200_hansya_gosen_r04");
-                if (track is CP.Timeline.LoopTrack) track.muted = false;
-            }
-            var sphere = root.transform.Find("Stage/stage/stage_9200/Root/stage_9200/pSphere1");
-            if (sphere) sphere.GetComponent<Renderer>().material.mainTexture = Assets.Get<Texture>("live_pv/sp/gacha/model/stage", "stage_tex_02");
+            // 奖品槽、预兆特效、舞台贴图、光照与反射特效按本次结果在 GachaTapWaitState.Init 中设置。
             SetupCameras(root);
             foreach (var model in root.GetComponentsInChildren<Sekai.Core.CharacterModel>(true)) model.Setup(21, new Sekai.Live.CharacterSetupSignals(false), 1.58f, new Sekai.Scripts.Live.Common.CharacterLightData(root.GetComponentInChildren<Sekai.SekaiDirectionalLight>(true)), new Color[] { new Color32(254,246,236,255), new Color32(228,197,204,255), new Color32(204,152,163,255) });
             foreach (var flare in root.GetComponentsInChildren<Sekai.Core.MeshFlareParaController>(true))
@@ -273,7 +382,8 @@ namespace SekaiGacha
                 if (receiver.GetReaction(signal) == null)
                 {
                     var reaction = new UnityEngine.Events.UnityEvent();
-                    reaction.AddListener(() => Audio.PlaySe("SE_GACHA_BRANCH_2_3RD_ANV"));
+                    // ScreenLayerGachaAnimation.OnPlayTimelineSE
+                    reaction.AddListener(() => Audio.PlaySe(((int)maxRarity & ~1) != 4 ? "SE_GACHA_BRANCH_1_3RD_ANV" : "SE_GACHA_BRANCH_2_3RD_ANV"));
                     receiver.AddReaction(signal, reaction);
                 }
                 if (signalTrack.playableAsset is TimelineAsset childTimeline)
@@ -305,52 +415,6 @@ namespace SekaiGacha
                     else if (track is Sekai.Core.Live.MeshFlareParaTrack) director.SetGenericBinding(track, root.GetComponentInChildren<Sekai.Core.MeshFlareParaController>(true));
             }
         }
-        void SetupReveal(GameObject root, Sprite sprite, int character)
-        {
-            string[] names = { "root/MainCamera/Main_card", "root/MainCamera/Main_card_blur", "root/MainCamera/Main_card_add" };
-            foreach (string name in names)
-            {
-                var renderer = root.transform.Find(name).GetComponent<SpriteRenderer>();
-                Vector2 size = renderer.size;
-                renderer.sprite = sprite;
-                renderer.size = size;
-            }
-            var label = root.transform.Find("root/member_name").GetComponent<SpriteRenderer>();
-            label.sprite = Assets.Get<Sprite>("character/label", "chr_name_h_" + character);
-            root.transform.Find("root/new").GetComponent<SpriteRenderer>().enabled = true;
-            foreach (var text in root.GetComponentsInChildren<TMP_Text>(true)) { text.font = tmpFont; text.text = ""; }
-            SetupCameras(root);
-        }
-        IEnumerator PlayTimeline(GameObject root, bool intro)
-        {
-            var director = intro ? root.transform.Find("Timeline").GetComponent<PlayableDirector>() : root.GetComponent<PlayableDirector>();
-            CurrentDirector = director;
-            director.Stop();
-            director.extrapolationMode = intro ? DirectorWrapMode.Hold : DirectorWrapMode.None;
-            director.time = 0;
-            director.Play();
-            Debug.Log("GACHA_TIMELINE " + root.name + " duration=" + director.duration);
-            if (intro)
-            {
-                var loop = ((TimelineAsset)director.playableAsset).GetOutputTracks().OfType<CP.Timeline.LoopTrack>().Single().GetClips().Single();
-                while (director.time <= loop.start) yield return null;
-                // 自动点击代替等待 UI；原 LoopBehaviour 负责调整衔接。
-                director.GetComponent<CP.Timeline.LoopWaitTimeline>().Trigger = true;
-                Audio.PlaySe("SE_GACHA_TAP_3RD_ANV");
-                var state = new GachaSpawnPlayback(root);
-                bool next = false;
-                while (!next)
-                {
-                    state.Execute(() => next = true, Audio.PlaySe);
-                    yield return null;
-                }
-            }
-            else
-            {
-                // 源自 Cpp2CS GachaDisplayState.Execute。
-                while (director.state == PlayState.Playing) yield return null;
-            }
-        }
         static void SetCameras(GameObject root, bool enabled)
         {
             foreach (var post in root.GetComponentsInChildren<Sekai.Core.Graphics.PostEffectV2>(true)) post.enabled = enabled;
@@ -360,9 +424,8 @@ namespace SekaiGacha
         void OnDestroy()
         {
             if (main) foreach (var director in main.GetComponentsInChildren<PlayableDirector>(true)) director.Stop();
-            foreach (var effect in effects) if (effect) foreach (var director in effect.GetComponentsInChildren<PlayableDirector>(true)) director.Stop();
-            if (main) Destroy(main);
-            foreach (var effect in effects) if (effect) Destroy(effect);
+            foreach (var effect in Effects.Values) if (effect && effect != main) foreach (var director in effect.GetComponentsInChildren<PlayableDirector>(true)) director.Stop();
+            foreach (var effect in Effects.Values) if (effect) Destroy(effect);
             Assets?.Dispose();
             if (Instance == this) Instance = null;
         }
