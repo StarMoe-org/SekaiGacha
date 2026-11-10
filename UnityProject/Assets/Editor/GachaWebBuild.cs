@@ -74,6 +74,15 @@ public static class GachaWebBuild
         string source = System.IO.File.ReadAllText(framework);
         var elseToggle = new Regex(@"(\w+)\[\1\.length-1\]\s*=\s*1-\1\[\1\.length-1\]");
         var extensionOnly = new Regex(@"(\w+)\s*!=\s*(['""])extension\2\)");
+        // 增量构建可能沿用上次输出的 framework.js，已修补过就不再改。
+        var elsePatched = new Regex(@"(\w+)\[\1\.length-1\]=\(1-\1\[\1\.length-1\]\)\*\1\[\1\.length-2\]");
+        var extensionPatched = new Regex(@"(\w+)!=(['""])extension\2&&\1!=\2line\2\)");
+        if (elseToggle.Matches(source).Count == 0 && extensionOnly.Matches(source).Count == 0
+            && elsePatched.Matches(source).Count == 1 && extensionPatched.Matches(source).Count == 1)
+        {
+            Debug.Log("GACHA_FRAMEWORK_ALREADY_PATCHED " + framework);
+            return;
+        }
         if (elseToggle.Matches(source).Count != 1 || extensionOnly.Matches(source).Count != 1) throw new Exception("WebGL 预处理器结构已变化");
         source = elseToggle.Replace(source, "$1[$1.length-1]=(1-$1[$1.length-1])*$1[$1.length-2]");
         source = extensionOnly.Replace(source, "$1!=$2extension$2&&$1!=$2line$2)");
