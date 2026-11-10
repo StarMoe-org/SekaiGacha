@@ -63,6 +63,8 @@ namespace SekaiGacha
             se?.Stop();
             if (voice) voice.Stop();
         }
+        // 原版 SoundManager.StopSEAll：只停音效。
+        public void StopSe() => se?.Stop();
         public void PlaySe(string cue)
         {
             if (Muted) return;

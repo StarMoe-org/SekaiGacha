@@ -145,6 +145,7 @@ namespace SekaiGacha
             {
                 case "就绪": return "ready";
                 case "加载": return app.Ready ? "loading" : "booting";
+                case "等待点击": return "tap";
                 case "3D演出": return "intro";
                 case "揭卡": return "reveal";
                 case "完成": return "complete";
