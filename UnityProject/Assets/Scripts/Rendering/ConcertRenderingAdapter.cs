@@ -57,7 +57,11 @@ public sealed class ConcertRenderingAdapter : ScriptableRendererFeature
         finalFade.target = renderer.cameraColorTargetHandle;
         if (data.cameraData.camera.GetComponent<Sekai.Core.Graphics.PostEffectV2>())
             originalPost.Setup(RenderPassEvent.BeforeRenderingPostProcessing, buffer, data.cameraData.cameraTargetDescriptor, buffer.SekaiBufferColorHandle, renderer.cameraColorTargetHandle);
-        foreach (var draw in draws) draw.Setup(-1, StencilState.defaultValue, 0, buffer);
+        // 原版 SekaiDrawObjectsRendererFeature.SetupRenderPass 传入渲染器数据的默认模板状态（m_DefaultStencilState，
+        // LiveRenderer 的 overrideStencilState 为 0，即不覆盖），各材质用自己的模板设置。
+        // StencilState.defaultValue 的 enabled 为 true，会把所有材质的模板改成 Always/Keep：SpriteMask 写不进模板，
+        // 招募台词（模板 Equal 1）不再被遮罩擦除。
+        foreach (var draw in draws) draw.Setup(-1, new StencilState(false), 0, buffer);
     }
     protected override void Dispose(bool disposing) { originalPost?.Dispose(); finalFade?.Dispose(); buffer?.ReleaseMRT(); }
     private sealed class PreparePass : ScriptableRenderPass
