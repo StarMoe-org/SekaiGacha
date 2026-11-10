@@ -13,6 +13,12 @@ MonoBehaviour:
   m_Name: GachaOfflineCatalog
   m_EditorClassIdentifier: 
   entries:
+  - bundle: effect_asset/gacha_obtain_prize
+    name: FOT-RodinNTLGPro-EB SDF_Base Gacha
+    asset: {fileID: 2100000, guid: 96b74979eaa9cee60f4c66caa5ad3840, type: 2}
+  - bundle: effect_asset/gacha_obtain_prize
+    name: FOT-RodinNTLGPro-EB SDF_Base Gacha2
+    asset: {fileID: 2100000, guid: 56dd7f71eea8d77ee4f89f0ef4bb8e95, type: 2}
   - bundle: live_pv/model/mesh_flare_para/textures/9200
     name: MeshFlareParaTexData
     asset: {fileID: 11400000, guid: 2ad4dd1de5441b7cb3f4474740939d5c, type: 2}
