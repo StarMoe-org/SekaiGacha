@@ -26,6 +26,7 @@ namespace SekaiGacha
         const string Prefix = "sekai-gacha:";
         GachaApp app;
         GachaCard[] pending;
+        string pendingRegion;
         string reported;
 
         void Awake() { app = GetComponent<GachaApp>(); }
@@ -39,7 +40,7 @@ namespace SekaiGacha
             {
                 var cards = pending;
                 pending = null;
-                Play(cards);
+                Play(cards, pendingRegion);
             }
             Report();
         }
@@ -53,9 +54,10 @@ namespace SekaiGacha
             {
                 case Prefix + "play":
                     if (!TryReadCards(message["cards"], out var cards, out string problem)) { Reject("invalid_cards", problem); break; }
+                    if (!TryReadRegion(message["region"], out string region)) { Reject("invalid_message", "region 无效"); break; }
                     // 引擎还在启动时先记下，就绪后再播。
-                    if (!app.Ready && app.Phase != "失败") pending = cards;
-                    else Play(cards);
+                    if (!app.Ready && app.Phase != "失败") { pending = cards; pendingRegion = region; }
+                    else Play(cards, region);
                     break;
                 case Prefix + "skip":
                     app.Skip();
@@ -105,6 +107,16 @@ namespace SekaiGacha
             return true;
         }
 
+        // 卡名和台词所属的服务器，决定显示用的字体；缺省为 jp。
+        static bool TryReadRegion(JToken token, out string region)
+        {
+            region = "jp";
+            if (token == null || token.Type == JTokenType.Null) return true;
+            if (token.Type != JTokenType.String) return false;
+            region = (string)token;
+            return region == "jp" || region == "en" || region == "tw" || region == "cn" || region == "kr";
+        }
+
         // 缺省或 null 视为空；否则须是不超长、不含控制字符的字符串。
         static bool TryReadText(JToken token, out string text)
         {
@@ -115,10 +127,10 @@ namespace SekaiGacha
             return GachaCard.IsValidText(text);
         }
 
-        void Play(GachaCard[] cards)
+        void Play(GachaCard[] cards, string region)
         {
             if (!app.CanPlay) { Reject("busy", "演出正在进行"); return; }
-            try { app.PlayCards(cards); }
+            try { app.PlayCards(cards, region); }
             catch (ArgumentException error) { Reject("invalid_cards", error.Message.Split('\n')[0].Trim()); }
         }
 

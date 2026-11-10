@@ -65,6 +65,27 @@ public static class GachaWebBuild
         Debug.Log("GACHA_WEB_BUILD " + report.summary.result + " errors=" + report.summary.totalErrors + " output=" + output);
         if (report.summary.result != BuildResult.Succeeded) throw new Exception("WebGL 构建失败");
         PatchFramework(output + "/Build/" + System.IO.Path.GetFileName(output) + ".framework.js");
+        BuildCjkFont(output);
+    }
+
+    // tw、cn、kr 用的字体 SekaiGacha CJK（思源黑体 SC Bold 的子集，见 tools/make-cjk-font.py）单独打成资源包，
+    // 放在 StreamingAssets/GachaFonts，运行时用到才下载（GachaApp.LoadCjkFont），不计入首次加载。
+    // SIL OFL 1.1 要求字体与许可证一起分发，许可证放在同一目录。
+    static void BuildCjkFont(string output)
+    {
+        const string font = "Assets/GachaFonts/SekaiGachaCJK-Bold.otf", license = "Assets/GachaFonts/LICENSE-SourceHanSans.txt";
+        string temp = System.IO.Path.Combine("Temp", "GachaCjkFont");
+        if (System.IO.Directory.Exists(temp)) System.IO.Directory.Delete(temp, true);
+        System.IO.Directory.CreateDirectory(temp);
+        var manifest = BuildPipeline.BuildAssetBundles(temp,
+            new[] { new AssetBundleBuild { assetBundleName = "gacha-cjk-font.bundle", assetNames = new[] { font } } },
+            BuildAssetBundleOptions.None, BuildTarget.WebGL);
+        if (!manifest) throw new Exception("字体资源包构建失败");
+        string target = System.IO.Path.Combine(output, "StreamingAssets", "GachaFonts");
+        System.IO.Directory.CreateDirectory(target);
+        System.IO.File.Copy(System.IO.Path.Combine(temp, "gacha-cjk-font.bundle"), System.IO.Path.Combine(target, "gacha-cjk-font.bundle"), true);
+        System.IO.File.Copy(license, System.IO.Path.Combine(target, "LICENSE-SourceHanSans.txt"), true);
+        Debug.Log("GACHA_CJK_FONT_BUNDLE bytes=" + new System.IO.FileInfo(System.IO.Path.Combine(target, "gacha-cjk-font.bundle")).Length);
     }
 
     // Unity 2022 WebGL 预处理器的嵌套 else 必须遵守父分支是否启用，并跳过 #line。

@@ -6,6 +6,7 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Networking;
 using UnityEngine.Playables;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.TextCore.LowLevel;
@@ -55,8 +56,24 @@ namespace SekaiGacha
         readonly List<GameObject> effects = new List<GameObject>();
         // 每个槽位预置 ★2/★3/★4 三种特效，按本次结果启用其一。
         readonly List<GameObject[]> prizeSlots = new List<GameObject[]>();
-        // 揭卡演出按稀有度选用，与原版 ScreenLayerGachaAnimation.Effects 相同，预先全部实例化。
+        // 揭卡演出按稀有度选用，与原版 ScreenLayerGachaAnimation.Effects 相同，每次演出开始时全部实例化。
         readonly Dictionary<string, GameObject> reveals = new Dictionary<string, GameObject>();
+        // 当前实例还没有用来演出过（初始化时刚建好）。
+        bool stageFresh;
+        // MainTimeline 资源在首次演出前的片段、标记和轨道状态。原版每次演出后卸载资源包、下次重新加载；
+        // 这里资源常驻，而 LoopBehaviour 触发时直接改资源上的片段（其 Reset 只在编辑器非运行时还原），所以每次演出前改回。
+        readonly List<(TimelineClip clip, double start, double duration, double blendIn, double blendOut, AnimationCurve mixIn, AnimationCurve mixOut)> mainClips =
+            new List<(TimelineClip, double, double, double, double, AnimationCurve, AnimationCurve)>();
+        readonly List<(Marker marker, double time)> mainMarkers = new List<(Marker, double)>();
+        readonly List<(TrackAsset track, bool muted)> mainTracks = new List<(TrackAsset, bool)>();
+        // 宿主所在的服务器（jp / en / tw / cn / kr）。日服字体 FOT-RodinNTLGPro-EB 几乎没有简体字和韩文；
+        // 台服客户端在这个字体的位置换成了思源黑体 SC Bold，所以 tw、cn、kr 的卡名和台词改用它的常用字子集
+        // SekaiGacha CJK（tools/make-cjk-font.py），第一次用到时从 StreamingAssets 下载。
+        const string CjkFontBundle = "GachaFonts/gacha-cjk-font.bundle", CjkFontName = "SekaiGachaCJK-Bold";
+        string textRegion = "jp";
+        TMP_FontAsset cjkFont;
+        Material cjkUnitNameMaterial, cjkPhraseMaterial;
+        AssetBundle cjkFontBundle;
         GachaCard[] currentCards;
         GachaRarity maxRarity = GachaRarity.Rarity4;
         readonly Dictionary<string, Sprite> cards = new Dictionary<string, Sprite>();
@@ -106,29 +123,18 @@ namespace SekaiGacha
             var catalog = JObject.Parse(Resources.Load<TextAsset>("CardCatalog").text)["cards"]
                 .Select(c => new GachaCard((string)c["id"], (GachaRarity)(int)c["rarity"], (string)c["prefix"] ?? "", (string)c["phrase"] ?? "")).ToArray();
             yield return Assets.Initialize();
-            unitNameMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha");
-            phraseMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha2");
+            unitNameMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha", tmpFont);
+            phraseMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha2", tmpFont);
             Audio.Initialize();
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
             Audio.LoadSheet("MenuCommon_Built_in");
             Audio.LoadSheet("BGM_GACHA_SCENE_3RD_ANV");
             yield return LoadCards(catalog);
-            main = InstantiateForSetup(Assets.Get<GameObject>("live_pv/sp/gacha/main", "MainTimeline"));
-            main.name = "OriginalGachaTimeline";
-            PrepareMain(main);
-            foreach (string name in RevealEffects)
-            {
-                var effect = InstantiateForSetup(Assets.Get<GameObject>("effect_asset/gacha_obtain_prize", name));
-                effect.name = name;
-                reveals.Add(name, effect);
-                effects.Add(effect);
-                SetupCameras(effect);
-                SetCameras(effect, false);
-                effect.SetActive(false);
-            }
+            SnapshotMainTimeline();
+            CreateStage();
+            // 预先走一遍揭卡的文字和材质设置，再按原版 Exit 收起。
             SetupReveal(catalog[0]);
-            SetCameras(main, false);
-            SetCameras(reveal, false);
+            ExitReveal();
             // 装载结束后跨过当前帧，避免初始化耗时进入演出的首帧时钟。
             yield return null;
             yield return new WaitForEndOfFrame();
@@ -143,6 +149,83 @@ namespace SekaiGacha
             // 先完成管理器和轨道绑定，再由外壳启动原版 Timeline。
             foreach (var director in prefab.GetComponentsInChildren<PlayableDirector>(true)) director.playOnAwake = false;
             return Instantiate(prefab);
+        }
+        // 原版每次进入抽卡演出时重新实例化 MainTimeline 和各揭卡特效（ScreenLayerGachaAnimation 的加载流程），
+        // 离开时 Release 全部销毁。这里每次抽卡前销毁上一次的实例并重新实例化，相机等都从 prefab 的初始状态开始。
+        void CreateStage()
+        {
+            if (main) Destroy(main);
+            foreach (var effect in effects) if (effect) Destroy(effect);
+            effects.Clear();
+            reveals.Clear();
+            prizeSlots.Clear();
+            reveal = null;
+            CurrentDirector = null;
+            RestoreMainTimeline();
+            main = InstantiateForSetup(Assets.Get<GameObject>("live_pv/sp/gacha/main", "MainTimeline"));
+            main.name = "OriginalGachaTimeline";
+            PrepareMain(main);
+            SetCameras(main, false);
+            foreach (string name in RevealEffects)
+            {
+                var effect = InstantiateForSetup(Assets.Get<GameObject>("effect_asset/gacha_obtain_prize", name));
+                effect.name = name;
+                reveals.Add(name, effect);
+                effects.Add(effect);
+                SetupCameras(effect);
+                SetCameras(effect, false);
+                effect.SetActive(false);
+            }
+            stageFresh = true;
+        }
+        void SnapshotMainTimeline()
+        {
+            var director = Assets.Get<GameObject>("live_pv/sp/gacha/main", "MainTimeline").transform.Find("Timeline").GetComponent<PlayableDirector>();
+            foreach (var track in ((TimelineAsset)director.playableAsset).GetOutputTracks())
+            {
+                mainTracks.Add((track, track.muted));
+                foreach (var clip in track.GetClips())
+                    mainClips.Add((clip, clip.start, clip.duration, clip.blendInDuration, clip.blendOutDuration, CopyCurve(clip.mixInCurve), CopyCurve(clip.mixOutCurve)));
+                foreach (var marker in track.GetMarkers())
+                    if (marker is Marker timed) mainMarkers.Add((timed, timed.time));
+            }
+        }
+        // LoopBehaviour.OnTrigger 改动的就是这些：片段的 start、duration、blendIn/Out、mixIn/OutCurve，标记的 time，LoopTrack 的 muted。
+        void RestoreMainTimeline()
+        {
+            foreach (var (track, muted) in mainTracks) track.muted = muted;
+            foreach (var saved in mainClips)
+            {
+                saved.clip.start = saved.start;
+                saved.clip.duration = saved.duration;
+                saved.clip.blendInDuration = saved.blendIn;
+                saved.clip.blendOutDuration = saved.blendOut;
+                saved.clip.mixInCurve = CopyCurve(saved.mixIn);
+                saved.clip.mixOutCurve = CopyCurve(saved.mixOut);
+            }
+            foreach (var (marker, time) in mainMarkers) marker.time = time;
+        }
+        static AnimationCurve CopyCurve(AnimationCurve curve) =>
+            curve == null ? null : new AnimationCurve(curve.keys) { preWrapMode = curve.preWrapMode, postWrapMode = curve.postWrapMode };
+        static bool UsesCjkFont(string region) => region == "tw" || region == "cn" || region == "kr";
+        IEnumerator LoadCjkFont()
+        {
+            if (cjkFont) yield break;
+            using (var request = UnityWebRequestAssetBundle.GetAssetBundle(Application.streamingAssetsPath + "/" + CjkFontBundle))
+            {
+                yield return request.SendWebRequest();
+                // 下载失败时沿用日服字体（缺的字显示为方框），演出照常。
+                if (request.result != UnityWebRequest.Result.Success) { Debug.LogWarning("GACHA_CJK_FONT_FAILED " + request.error); yield break; }
+                cjkFontBundle = DownloadHandlerAssetBundle.GetContent(request);
+            }
+            var font = cjkFontBundle ? cjkFontBundle.LoadAsset<Font>(CjkFontName) : null;
+            if (!font) { Debug.LogWarning("GACHA_CJK_FONT_FAILED " + CjkFontName + " 不在资源包里"); yield break; }
+            // 与日服字体相同的动态图集参数；子集里没有的字退回日服字体。资源包不卸载，动态生成字形要用字体数据。
+            cjkFont = TMP_FontAsset.CreateFontAsset(font, 35, 5, GlyphRenderMode.SDFAA, 1024, 1024, AtlasPopulationMode.Dynamic, true);
+            cjkFont.fallbackFontAssetTable = new List<TMP_FontAsset> { tmpFont };
+            cjkUnitNameMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha", cjkFont);
+            cjkPhraseMaterial = TextMaterial("FOT-RodinNTLGPro-EB SDF_Base Gacha2", cjkFont);
+            Debug.Log("GACHA_CJK_FONT ready");
         }
         IEnumerator LoadCards(GachaCard[] draw)
         {
@@ -171,13 +254,14 @@ namespace SekaiGacha
                 throw new ArgumentException("需要 1 至 10 个有效卡牌资源名", nameof(results));
             PlayCards(results.Select(id => new GachaCard(id, GachaRarity.Rarity4)).ToArray());
         }
-        // 接收上层给出的结果，按每张卡的稀有度演出；不执行账号或真实抽卡请求。
-        public void PlayCards(GachaCard[] draw)
+        // 接收上层给出的结果，按每张卡的稀有度演出；不执行账号或真实抽卡请求。region 为卡名和台词所属的服务器。
+        public void PlayCards(GachaCard[] draw, string region = "jp")
         {
             if (!CanPlay) throw new InvalidOperationException("演出正在进行");
             if (draw == null || draw.Length < 1 || draw.Length > 10 || draw.Any(card => card.Id == null))
                 throw new ArgumentException("需要 1 至 10 个有效卡牌资源名", nameof(draw));
             currentCards = (GachaCard[])draw.Clone();
+            textRegion = region ?? "jp";
             CurrentResults = currentCards.Select(card => card.Id).ToArray();
             Error = null;
             triggerSkip = skipPressed = finishRequested = false;
@@ -190,12 +274,18 @@ namespace SekaiGacha
             DrawCount = CurrentResults.Length;
             RevealedCount = 0;
             Phase = "加载";
+            // 收起上一次演出停留的画面，换上新实例（原版此时也是新进入演出画面）。
+            fallbackCamera.enabled = true;
+            if (!stageFresh) CreateStage();
+            stageFresh = false;
             yield return LoadCards(currentCards);
+            if (UsesCjkFont(textRegion)) yield return LoadCjkFont();
+            // 原版离开演出画面时 Unload 卸载资源；这里释放上一次实例留下的材质等。
+            yield return Resources.UnloadUnusedAssets();
             MaximumFrameMs = 0;
             SlowFrames = 0;
             SetupMain(currentCards);
             fallbackCamera.enabled = false;
-            SetCameras(reveal, false);
             main.SetActive(true);
             SetCameras(main, true);
             ShowStage(true);
@@ -206,7 +296,8 @@ namespace SekaiGacha
             skipPressed = false;
             if (triggerSkip || finishRequested) main.transform.Find("Timeline").GetComponent<PlayableDirector>().Stop();
             main.SetActive(false);
-            bool shown = false;
+            // 停在画面上的卡：正常结束（播完或点击进入下一张）的最后一张。
+            bool holding = false;
             for (int i = 0; i < currentCards.Length && !finishRequested; i++)
             {
                 var card = currentCards[i];
@@ -223,28 +314,29 @@ namespace SekaiGacha
                 Phase = "揭卡";
                 // 原版 ★2 不播获得语音（GachaDisplayState 只对 ★3 以上调用 SetupVoice）。
                 if (card.Rarity != GachaRarity.Rarity2) Audio.PlayVoice(card.Id, cardMedia[card.Id].Voice);
-                shown = true;
                 Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card.Id + " " + card.Rarity + " " + reveal.name);
                 yield return PlayTimeline(reveal, false);
+                // 跳过（原版 OnClickSkipButton → NextState）或宿主结束时，当前卡立即按 GachaDisplayState.Exit 收起。
+                // 正常结束的卡由下一张的 SetupReveal 接替（同一特效时重设文字，不同特效时隐藏旧的）。
+                holding = !skipPressed && !finishRequested;
+                if (!holding) ExitReveal();
                 skipPressed = false;
             }
             RevealedCount = DrawCount;
-            if (finishRequested || !shown)
+            if (holding)
             {
-                // 原版此后进入结算画面；这里没有结算画面，宿主要求立即结束或跳过后一张也没展示时，
-                // 停在最后一张卡的末尾展示段。
-                SetupReveal(currentCards[currentCards.Length - 1]);
-                SetCameras(main, false);
-                SetCameras(reveal, true);
-                CurrentDirector = reveal.GetComponent<PlayableDirector>();
-                CurrentDirector.extrapolationMode = DirectorWrapMode.None;
-                CurrentDirector.Play();
+                // 原版最后一张 Exit 后进入结算画面；这里没有结算画面，停在原版点击跳转使用的末尾展示段。
+                CurrentDirector.time = Math.Max(0, CurrentDirector.duration - CardEndWaitSeconds);
+                CurrentDirector.Evaluate();
+                CurrentDirector.Pause();
+            }
+            else
+            {
+                // 跳过或宿主结束：与原版一样不再显示卡（原版接着进入结算画面），画面收起。
+                ExitReveal();
+                fallbackCamera.enabled = true;
                 Debug.Log("GACHA_SKIPPED");
             }
-            // 无结算界面时停留在原版点击跳转使用的末尾展示段。
-            CurrentDirector.time = Math.Max(0, CurrentDirector.duration - CardEndWaitSeconds);
-            CurrentDirector.Evaluate();
-            CurrentDirector.Pause();
             // 原版跳过后各状态 Exit 时卸载语音；这里结束时停掉。
             if (triggerSkip || finishRequested) Audio.Stop();
             // 原版最后一张 NextState 后离开本画面进入结算画面（OnExited 改放结算画面的 BGM）；这里没有结算画面，
@@ -489,10 +581,21 @@ namespace SekaiGacha
             root.transform.Find("root/new").GetComponent<SpriteRenderer>().enabled = NewCard;
             // 原版 SetupCharacter 在 unit_name 显示卡名，SetupVoice（★3 以上）在 MainCamera/Text 显示招募台词。
             // prefab 里的文字是占位，先全部清空。
-            foreach (var text in root.GetComponentsInChildren<TMP_Text>(true)) { text.font = tmpFont; text.text = ""; }
-            SetText(root.transform.Find("root/unit_name"), unitNameMaterial, card.Prefix);
-            if (card.Rarity != GachaRarity.Rarity2) SetText(root.transform.Find("root/MainCamera/Text"), phraseMaterial, card.Phrase);
+            bool cjk = UsesCjkFont(textRegion) && cjkFont;
+            var font = cjk ? cjkFont : tmpFont;
+            foreach (var text in root.GetComponentsInChildren<TMP_Text>(true)) { text.font = font; text.text = ""; }
+            SetText(root.transform.Find("root/unit_name"), cjk ? cjkUnitNameMaterial : unitNameMaterial, card.Prefix);
+            if (card.Rarity != GachaRarity.Rarity2) SetText(root.transform.Find("root/MainCamera/Text"), cjk ? cjkPhraseMaterial : phraseMaterial, card.Phrase);
             SetupCameras(root);
+        }
+        // 原版 GachaDisplayState.Exit：卸载本卡的资源包，把文字的字体材质置空，隐藏特效。
+        // 这里资源不按卡卸载，清空文字后隐藏特效。
+        void ExitReveal()
+        {
+            if (!reveal) return;
+            foreach (var text in reveal.GetComponentsInChildren<TMP_Text>(true)) text.text = "";
+            SetCameras(reveal, false);
+            reveal.SetActive(false);
         }
         // 文字来自宿主，按纯文本显示。
         static void SetText(Transform node, Material material, string value)
@@ -503,14 +606,14 @@ namespace SekaiGacha
             text.text = value;
         }
         // 复制原版材质，换成动态图集；着色器在当前平台不可用时改用字体的默认着色器。
-        Material TextMaterial(string name)
+        Material TextMaterial(string name, TMP_FontAsset font)
         {
-            var material = new Material(Assets.Get<Material>("effect_asset/gacha_obtain_prize", name)) { name = name + " (Dynamic)" };
-            if (!material.shader || !material.shader.isSupported) material.shader = tmpFont.material.shader;
-            material.SetTexture(ShaderUtilities.ID_MainTex, tmpFont.atlasTexture);
-            material.SetFloat(ShaderUtilities.ID_TextureWidth, tmpFont.atlasWidth);
-            material.SetFloat(ShaderUtilities.ID_TextureHeight, tmpFont.atlasHeight);
-            material.SetFloat(ShaderUtilities.ID_GradientScale, tmpFont.atlasPadding + 1);
+            var material = new Material(Assets.Get<Material>("effect_asset/gacha_obtain_prize", name)) { name = name + " (" + font.name + ")" };
+            if (!material.shader || !material.shader.isSupported) material.shader = font.material.shader;
+            material.SetTexture(ShaderUtilities.ID_MainTex, font.atlasTexture);
+            material.SetFloat(ShaderUtilities.ID_TextureWidth, font.atlasWidth);
+            material.SetFloat(ShaderUtilities.ID_TextureHeight, font.atlasHeight);
+            material.SetFloat(ShaderUtilities.ID_GradientScale, font.atlasPadding + 1);
             Debug.Log("GACHA_TEXT_MATERIAL " + name + " shader=" + material.shader.name);
             return material;
         }
