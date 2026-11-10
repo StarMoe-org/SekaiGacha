@@ -24,7 +24,9 @@
     //       决定开场预告和揭卡演出；只给资源名字符串（如 "res001_no004"）时不知道稀有度，按 ★4 演出。
     //       可选 prefix、phrase 取主数据 prefix（卡名）和 gachaPhrase（招募台词），按纯文本显示，各至多 64 字；
     //       ★2 只显示卡名
-    //   { type: "sekai-gacha:skip" }                                 跳到最后一张卡的结束画面
+    //   { type: "sekai-gacha:skip" }                                 与原版跳过相同：跳过开场和可跳的卡，停在下一张 ★4、生日卡或新获得的 ★3；
+    //                                                                此后一直处于跳过模式，没有剩下的卡时结束
+    //   { type: "sekai-gacha:finish" }                               立即结束（宿主关闭页面时用），停在最后一张卡的结束画面
     //   { type: "sekai-gacha:mute", muted: true }                    静音或恢复
     //
     // 本页 → 宿主（不含敏感内容，targetOrigin 为 "*"）：

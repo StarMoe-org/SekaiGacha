@@ -52,7 +52,15 @@ namespace SekaiGacha
         GachaRarity maxRarity = GachaRarity.Rarity4;
         readonly Dictionary<string, Sprite> cards = new Dictionary<string, Sprite>();
         readonly Dictionary<string, GachaAssetBucket.Card> cardMedia = new Dictionary<string, GachaAssetBucket.Card>();
-        bool busy, skipRequested;
+        bool busy;
+        // 原版 ScreenLayerGachaAnimation.triggerSkip：按下跳过后直到演出结束都保持，DequeueNext 据此跳过可跳的状态。
+        bool triggerSkip;
+        // 一次跳过（原版 OnClickSkipButton 里的 NextState）：立即结束当前状态。
+        bool skipPressed;
+        // 宿主要求立即结束（关闭页面等）；原版没有，嵌入专用。
+        bool finishRequested;
+        // 每张卡都按新获得处理：root/new 始终显示，★3 也因此不可跳过（原版 GachaDisplayState.IsEnableSkip）。
+        const bool NewCard = true;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         static void Boot() { if (!FindObjectOfType<GachaApp>()) new GameObject("SekaiGacha").AddComponent<GachaApp>(); }
@@ -161,7 +169,7 @@ namespace SekaiGacha
             currentCards = (GachaCard[])draw.Clone();
             CurrentResults = currentCards.Select(card => card.Id).ToArray();
             Error = null;
-            skipRequested = false;
+            triggerSkip = skipPressed = finishRequested = false;
             clickRequested = false;
             busy = true;
             StartCoroutine(Guard(Play()));
@@ -180,41 +188,53 @@ namespace SekaiGacha
             main.SetActive(true);
             SetCameras(main, true);
             Phase = "3D演出";
-            // 下载卡牌期间已请求跳过时不再启动开场。
-            if (!skipRequested) yield return PlayTimeline(main, true);
-            if (skipRequested) main.transform.Find("Timeline").GetComponent<PlayableDirector>().Stop();
+            // 原版 CreateState：GachaTapWaitState、GachaSpawnAnimationState，再每张卡一个 GachaDisplayState。
+            // 开场两段 IsEnableSkip 都为 true，已在跳过模式（下载卡牌期间按了跳过）时由 DequeueNext 直接跳过。
+            if (!triggerSkip && !finishRequested) yield return PlayTimeline(main, true);
+            skipPressed = false;
+            if (triggerSkip || finishRequested) main.transform.Find("Timeline").GetComponent<PlayableDirector>().Stop();
             main.SetActive(false);
-            foreach (var card in currentCards)
+            bool shown = false;
+            for (int i = 0; i < currentCards.Length && !finishRequested; i++)
             {
-                if (skipRequested) break;
+                var card = currentCards[i];
+                RevealedCount = i + 1;
+                // 原版 DequeueNext：triggerSkip 后跳过 IsEnableSkip 的 GachaDisplayState。
+                if (triggerSkip && IsEnableSkip(card))
+                {
+                    Debug.Log("GACHA_SKIP_CARD " + RevealedCount + "/" + DrawCount + " " + card.Id + " " + card.Rarity);
+                    continue;
+                }
                 SetupReveal(card);
                 SetCameras(main, false);
                 SetCameras(reveal, true);
                 Phase = "揭卡";
                 // 原版 ★2 不播获得语音（GachaDisplayState 只对 ★3 以上调用 SetupVoice）。
                 if (card.Rarity != GachaRarity.Rarity2) Audio.PlayVoice(card.Id, cardMedia[card.Id].Voice);
-                RevealedCount++;
+                shown = true;
                 Debug.Log("GACHA_REVEAL " + RevealedCount + "/" + DrawCount + " " + card.Id + " " + card.Rarity + " " + reveal.name);
                 yield return PlayTimeline(reveal, false);
+                skipPressed = false;
             }
-            if (skipRequested)
+            RevealedCount = DrawCount;
+            if (finishRequested || !shown)
             {
-                // 跳过：直接停在最后一张卡的末尾展示段。
-                Audio.Stop();
+                // 原版此后进入结算画面；这里没有结算画面，宿主要求立即结束或跳过后一张也没展示时，
+                // 停在最后一张卡的末尾展示段。
                 SetupReveal(currentCards[currentCards.Length - 1]);
                 SetCameras(main, false);
                 SetCameras(reveal, true);
                 CurrentDirector = reveal.GetComponent<PlayableDirector>();
                 CurrentDirector.extrapolationMode = DirectorWrapMode.None;
                 CurrentDirector.Play();
-                RevealedCount = DrawCount;
                 Debug.Log("GACHA_SKIPPED");
             }
             // 无结算界面时停留在原版点击跳转使用的末尾展示段。
             CurrentDirector.time = Math.Max(0, CurrentDirector.duration - CardEndWaitSeconds);
             CurrentDirector.Evaluate();
             CurrentDirector.Pause();
-            if (skipRequested) Audio.Stop();
+            // 原版跳过后各状态 Exit 时卸载语音；这里结束时停掉。
+            if (triggerSkip || finishRequested) Audio.Stop();
             Phase = "完成";
             busy = false;
             Debug.Log("GACHA_COMPLETE count=" + DrawCount + " voices=" + Audio.VoiceCount + " peak=" + Audio.VoicePeak + " maximumFrameMs=" + MaximumFrameMs + " framesOver100ms=" + SlowFrames);
@@ -446,7 +466,7 @@ namespace SekaiGacha
                 root.transform.Find("root/MainCamera/Main_card_BG").GetComponent<SpriteRenderer>().sprite = Assets.Get<Sprite>("unit_background", UnitBackground(card.CharacterId));
             var label = root.transform.Find("root/member_name").GetComponent<SpriteRenderer>();
             label.sprite = Assets.Get<Sprite>("character/label", "chr_name_h_" + card.CharacterId);
-            root.transform.Find("root/new").GetComponent<SpriteRenderer>().enabled = true;
+            root.transform.Find("root/new").GetComponent<SpriteRenderer>().enabled = NewCard;
             // 原版 SetupCharacter 在 unit_name 显示卡名，SetupVoice（★3 以上）在 MainCamera/Text 显示招募台词。
             // prefab 里的文字是占位，先全部清空。
             foreach (var text in root.GetComponentsInChildren<TMP_Text>(true)) { text.font = tmpFont; text.text = ""; }
@@ -504,10 +524,10 @@ namespace SekaiGacha
                 tapToStart.SetActive(true);
                 Phase = "等待点击";
                 Debug.Log("GACHA_TAP_WAIT");
-                while (!skipRequested && !TakeClick()) yield return null;
+                while (!skipPressed && !finishRequested && !TakeClick()) yield return null;
                 // 原版 OnClickSkipButton 同样先隐藏提示。
                 tapToStart.SetActive(false);
-                if (skipRequested) yield break;
+                if (skipPressed || finishRequested) yield break;
                 Phase = "3D演出";
                 Debug.Log("GACHA_TAP time=" + director.time.ToString("F3"));
                 director.GetComponent<CP.Timeline.LoopWaitTimeline>().Trigger = true;
@@ -515,7 +535,7 @@ namespace SekaiGacha
                 Audio.PlaySe("SE_GACHA_TAP_3RD_ANV");
                 // 原版 GachaSpawnAnimationState：Execute 判定时间轴将到末尾（减去 deltaTime）即 NextState；
                 // Click 停掉音效并 NextState。两者都在同一帧隐藏开场、开始揭卡，否则白闪之后会露出一帧 3D 场景。
-                while (!skipRequested)
+                while (!skipPressed && !finishRequested)
                 {
                     if (TakeClick())
                     {
@@ -538,7 +558,7 @@ namespace SekaiGacha
             {
                 // 原版 GachaDisplayState：Execute 在时间轴停止后 NextState；
                 // Click 在末尾展示段（duration - WaitTime）之前跳到该段并立即求值，已在该段则 NextState。
-                while (!skipRequested)
+                while (!skipPressed && !finishRequested)
                 {
                     if (TakeClick())
                     {
@@ -592,7 +612,21 @@ namespace SekaiGacha
             tapToStart.SetActive(false);
         }
         // 播放中（含下载卡牌时）请求跳过，演出在下一帧停到结束画面。
-        public void Skip() { if (busy) skipRequested = true; }
+        // 原版 OnClickSkipButton：（SE_DECIDE1，系统音效未收录）隐藏 TapToStart，triggerSkip，StopSEAll，NextState。
+        // 下载卡牌期间按下时，开场开始前就进入跳过模式。
+        public void Skip()
+        {
+            if (!busy) return;
+            tapToStart.SetActive(false);
+            triggerSkip = true;
+            Audio.StopSe();
+            skipPressed = true;
+            Debug.Log("GACHA_SKIP");
+        }
+        // 宿主专用：立即结束，停在最后一张卡的末尾展示段。
+        public void Finish() { if (busy) finishRequested = true; }
+        // 原版 GachaDisplayState.IsEnableSkip。
+        static bool IsEnableSkip(GachaCard card) => !(GachaCard.IsTopRarity(card.Rarity) || (card.Rarity == GachaRarity.Rarity3 && NewCard));
         static void SetCameras(GameObject root, bool enabled)
         {
             foreach (var post in root.GetComponentsInChildren<Sekai.Core.Graphics.PostEffectV2>(true)) post.enabled = enabled;

@@ -60,6 +60,9 @@ namespace SekaiGacha
                 case Prefix + "skip":
                     app.Skip();
                     break;
+                case Prefix + "finish":
+                    app.Finish();
+                    break;
                 case Prefix + "mute":
                     app.Audio.Muted = message["muted"]?.Type != JTokenType.Boolean || (bool)message["muted"];
                     break;
