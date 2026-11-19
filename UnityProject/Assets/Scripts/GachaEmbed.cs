@@ -27,6 +27,7 @@ namespace SekaiGacha
         GachaApp app;
         GachaCard[] pending;
         string pendingRegion;
+        string pendingAssetSource;
         string reported;
 
         void Awake() { app = GetComponent<GachaApp>(); }
@@ -39,8 +40,12 @@ namespace SekaiGacha
             if (pending != null && app.CanPlay)
             {
                 var cards = pending;
+                var region = pendingRegion;
+                var assetSource = pendingAssetSource;
                 pending = null;
-                Play(cards, pendingRegion);
+                pendingRegion = null;
+                pendingAssetSource = null;
+                Play(cards, region, assetSource);
             }
             Report();
         }
@@ -55,9 +60,14 @@ namespace SekaiGacha
                 case Prefix + "play":
                     if (!TryReadCards(message["cards"], out var cards, out string problem)) { Reject("invalid_cards", problem); break; }
                     if (!TryReadRegion(message["region"], out string region)) { Reject("invalid_message", "region 无效"); break; }
+                    if (!TryReadAssetSource(message["assetSource"], out string assetSource)) { Reject("invalid_message", "assetSource 无效"); break; }
                     // 引擎还在启动时先记下，就绪后再播。
-                    if (!app.Ready && app.Phase != "失败") { pending = cards; pendingRegion = region; }
-                    else Play(cards, region);
+                    if (!app.Ready && app.Phase != "失败") { pending = cards; pendingRegion = region; pendingAssetSource = assetSource; }
+                    else Play(cards, region, assetSource);
+                    break;
+                case Prefix + "config":
+                    if (!TryReadAssetSource(message["assetSource"], out string configAssetSource)) { Reject("invalid_message", "assetSource 无效"); break; }
+                    app.Bucket.AssetSource = configAssetSource;
                     break;
                 case Prefix + "skip":
                     app.Skip();
@@ -117,6 +127,16 @@ namespace SekaiGacha
             return region == "jp" || region == "en" || region == "tw" || region == "cn" || region == "kr";
         }
 
+        // 卡面和语音使用的资源线路（main / backup）；缺省为 main（优先 storage.pjsk.moe）。
+        static bool TryReadAssetSource(JToken token, out string assetSource)
+        {
+            assetSource = GachaAssetBucket.AssetSourceMain;
+            if (token == null || token.Type == JTokenType.Null) return true;
+            if (token.Type != JTokenType.String) return false;
+            assetSource = (string)token;
+            return GachaAssetBucket.IsValidAssetSource(assetSource);
+        }
+
         // 缺省或 null 视为空；否则须是不超长、不含控制字符的字符串。
         static bool TryReadText(JToken token, out string text)
         {
@@ -127,9 +147,10 @@ namespace SekaiGacha
             return GachaCard.IsValidText(text);
         }
 
-        void Play(GachaCard[] cards, string region)
+        void Play(GachaCard[] cards, string region, string assetSource)
         {
             if (!app.CanPlay) { Reject("busy", "演出正在进行"); return; }
+            app.Bucket.AssetSource = assetSource ?? GachaAssetBucket.AssetSourceMain;
             try { app.PlayCards(cards, region); }
             catch (ArgumentException error) { Reject("invalid_cards", error.Message.Split('\n')[0].Trim()); }
         }

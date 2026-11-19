@@ -129,12 +129,20 @@ namespace SekaiGacha
             Audio.Load(Assets, "gacha/sound/se/se_gacha");
             Audio.LoadSheet("MenuCommon_Built_in");
             Audio.LoadSheet("BGM_GACHA_SCENE_3RD_ANV");
-            yield return LoadCards(catalog);
+            if (!GachaEmbed.Embedded) yield return LoadCards(catalog);
             SnapshotMainTimeline();
             CreateStage();
             // 预先走一遍揭卡的文字和材质设置，再按原版 Exit 收起。
-            SetupReveal(catalog[0]);
-            ExitReveal();
+            // 嵌入模式下此时尚未收到宿主的 assetSource，不提前下载远程演示卡牌，改用占位纹理预热并立即释放。
+            if (GachaEmbed.Embedded)
+            {
+                WarmupReveal(catalog[0]);
+            }
+            else
+            {
+                SetupReveal(catalog[0]);
+                ExitReveal();
+            }
             // 装载结束后跨过当前帧，避免初始化耗时进入演出的首帧时钟。
             yield return null;
             yield return new WaitForEndOfFrame();
@@ -246,6 +254,24 @@ namespace SekaiGacha
             if (cardMedia.TryGetValue(id, out var media)) media.Release();
             cards.Remove(id);
             cardMedia.Remove(id);
+        }
+        // 嵌入模式下不提前下载远程卡面，用临时 4x4 占位纹理完成揭卡着色器/字体预热，随后立即销毁并清空缓存项。
+        void WarmupReveal(GachaCard sample)
+        {
+            var placeholder = new Texture2D(4, 4, TextureFormat.RGBA32, false, false);
+            placeholder.wrapMode = TextureWrapMode.Clamp;
+            placeholder.Apply(false, true);
+            cardMedia[sample.Id] = new GachaAssetBucket.Card { Art = placeholder };
+            cards[sample.Id] = Sprite.Create(placeholder, new Rect(0, 0, placeholder.width, placeholder.height), new Vector2(.5f, .5f), 100, 0, SpriteMeshType.FullRect);
+            try
+            {
+                SetupReveal(sample);
+                ExitReveal();
+            }
+            finally
+            {
+                ReleaseCard(sample.Id);
+            }
         }
         // 只给资源名的旧调用：不知道稀有度，按 ★4 演出播放。
         public void PlayCards(string[] results)

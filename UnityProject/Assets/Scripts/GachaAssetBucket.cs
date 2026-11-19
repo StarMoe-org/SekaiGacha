@@ -3,6 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+#if UNITY_WEBGL && !UNITY_EDITOR
+using System.Runtime.InteropServices;
+#endif
 using UnityEngine;
 using UnityEngine.Networking;
 
@@ -12,10 +15,27 @@ namespace SekaiGacha
     // 与原版 GachaDisplayState 相同：★2 用 member_gacha 的立绘且不播语音，★3 以上用卡面并播语音。
     public sealed class GachaAssetBucket
     {
-        // 两条线是同一份资源，顺序与 Moesekai 主站一致：主线 storage.pjsk.moe（Cloudflare）失败时换备用线
-        // storage.exmeaning.com（EdgeOne），资源不存在（404）时不再重试。
-        static readonly string[] Hosts = { "https://storage.pjsk.moe", "https://storage.exmeaning.com" };
+#if UNITY_WEBGL && !UNITY_EDITOR
+        [DllImport("__Internal")] static extern int SekaiGachaStartImageLoad(string path, string hostsCsv);
+        [DllImport("__Internal")] static extern int SekaiGachaPollImageLoad(int handle, out int width, out int height, out int status, out IntPtr pixelsPtr, out int pixelsLen);
+        [DllImport("__Internal")] static extern string SekaiGachaGetImageError(int handle);
+        [DllImport("__Internal")] static extern void SekaiGachaReleaseImageLoad(int handle);
+#endif
+        public const string AssetSourceMain = "main";
+        public const string AssetSourceBackup = "backup";
+        // 两条线是同一份资源，默认顺序与 Moesekai 主站一致：主线 storage.pjsk.moe（Cloudflare）失败时换备用线
+        // storage.exmeaning.com（EdgeOne）；宿主指定 backup 时顺序相反；资源不存在（404）时不再重试。
+        static readonly string[] MainHosts = { "https://storage.pjsk.moe", "https://storage.exmeaning.com" };
+        static readonly string[] BackupHosts = { "https://storage.exmeaning.com", "https://storage.pjsk.moe" };
         const string Region = "jp";
+        string assetSource = AssetSourceMain;
+        public string AssetSource
+        {
+            get => assetSource;
+            set => assetSource = value == AssetSourceBackup ? AssetSourceBackup : AssetSourceMain;
+        }
+        public static bool IsValidAssetSource(string value) => value == AssetSourceMain || value == AssetSourceBackup;
+        string[] OrderedHosts() => assetSource == AssetSourceBackup ? BackupHosts : MainHosts;
         public static string UserAgent => "SekaiGacha/" + Application.version + " (" + Application.platform + "; Unity " + Application.unityVersion + ")";
 
         public sealed class Card
@@ -38,7 +58,8 @@ namespace SekaiGacha
         // 并行下载 into 中还没有的卡；卡面缺失视为失败，语音缺失按无语音处理。
         public IEnumerator Load(IEnumerable<GachaCard> cards, IDictionary<string, Card> into)
         {
-            var jobs = cards.GroupBy(card => card.Id).Select(group => group.First()).Where(card => !into.ContainsKey(card.Id)).Select(card => new Job(card)).ToArray();
+            var hosts = OrderedHosts();
+            var jobs = cards.GroupBy(card => card.Id).Select(group => group.First()).Where(card => !into.ContainsKey(card.Id)).Select(card => new Job(card, hosts)).ToArray();
             foreach (var job in jobs) runner.StartCoroutine(job.Run());
             while (jobs.Any(job => !job.Done)) yield return null;
             var failed = jobs.FirstOrDefault(job => job.Error != null);
@@ -54,10 +75,11 @@ namespace SekaiGacha
         {
             public readonly string Id;
             readonly GachaRarity rarity;
+            readonly string[] hosts;
             public readonly Card Result = new Card();
             public bool Done;
             public string Error;
-            public Job(GachaCard card) { Id = card.Id; rarity = card.Rarity; }
+            public Job(GachaCard card, string[] hosts) { Id = card.Id; rarity = card.Rarity; this.hosts = hosts; }
 
             public IEnumerator Run()
             {
@@ -67,18 +89,33 @@ namespace SekaiGacha
                     long status = 0;
                     string message = null;
                     // ★2 的演出用 member_gacha 立绘；初始即特训的卡只有特训后卡面。
+                    // WebGL 端走浏览器原生 WebP 解码（体积远小于 PNG）并配合 Cache Storage 缓存；编辑器/桌面沿用 PNG。
+#if UNITY_WEBGL && !UNITY_EDITOR
+                    string[] arts = rarity == GachaRarity.Rarity2
+                        ? new[] { "character/member_gacha/" + Id + "/normal.webp" }
+                        : new[] { "character/member/" + Id + "/card_normal.webp", "character/member/" + Id + "/card_after_training.webp" };
+                    for (int i = 0; i < arts.Length; i++)
+                    {
+                        yield return FetchWebImage(arts[i], hosts,
+                            texture => Result.Art = texture,
+                            (code, error) => { status = code; message = error; });
+                        Result.AfterTrainingOnly = i == 1;
+                        if (Result.Art || status != 404) break;
+                    }
+#else
                     string[] arts = rarity == GachaRarity.Rarity2
                         ? new[] { "character/member_gacha/" + Id + "/normal.png" }
                         : new[] { "character/member/" + Id + "/card_normal.png", "character/member/" + Id + "/card_after_training.png" };
                     for (int i = 0; i < arts.Length; i++)
                     {
-                        yield return Fetch(arts[i],
+                        yield return Fetch(arts[i], hosts,
                             url => UnityWebRequestTexture.GetTexture(url, true),
                             request => Result.Art = DownloadHandlerTexture.GetContent(request),
                             (code, error) => { status = code; message = error; });
                         Result.AfterTrainingOnly = i == 1;
                         if (Result.Art || status != 404) break;
                     }
+#endif
                     if (!Result.Art)
                     {
                         Error = "卡面下载失败 " + Id + " HTTP " + status + ": " + message;
@@ -91,7 +128,7 @@ namespace SekaiGacha
                         Error = null;
                         yield break;
                     }
-                    yield return Fetch("sound/gacha/get_voice/" + Id + "/" + Id + ".mp3",
+                    yield return Fetch("sound/gacha/get_voice/" + Id + "/" + Id + ".mp3", hosts,
                         url => UnityWebRequestMultimedia.GetAudioClip(url, AudioType.MPEG),
                         request => Result.Voice = DownloadHandlerAudioClip.GetContent(request),
                         (code, error) => { if (code != 404) Debug.LogWarning("GACHA_VOICE_DOWNLOAD_FAILED " + Id + " HTTP " + code + ": " + error); });
@@ -101,11 +138,60 @@ namespace SekaiGacha
             }
         }
 
-        static IEnumerator Fetch(string path, Func<string, UnityWebRequest> create, Action<UnityWebRequest> success, Action<long, string> fail)
+#if UNITY_WEBGL && !UNITY_EDITOR
+        static IEnumerator FetchWebImage(string path, string[] hosts, Action<Texture2D> success, Action<long, string> fail)
+        {
+            int handle = SekaiGachaStartImageLoad(path, string.Join(",", hosts));
+            if (handle <= 0)
+            {
+                fail(0, "image_loader_unavailable");
+                yield break;
+            }
+            try
+            {
+                while (true)
+                {
+                    int state = SekaiGachaPollImageLoad(handle, out int width, out int height, out int status, out IntPtr pixelsPtr, out int pixelsLen);
+                    if (state == 0)
+                    {
+                        yield return null;
+                        continue;
+                    }
+                    if (state > 0 && pixelsPtr != IntPtr.Zero && width > 0 && height > 0 && (long)width * height * 4L == pixelsLen)
+                    {
+                        var texture = new Texture2D(width, height, TextureFormat.RGBA32, false, false);
+                        try
+                        {
+                            texture.LoadRawTextureData(pixelsPtr, pixelsLen);
+                            texture.Apply(false, true);
+                            success(texture);
+                        }
+                        catch (Exception exception)
+                        {
+                            UnityEngine.Object.Destroy(texture);
+                            fail(status, exception.Message);
+                        }
+                    }
+                    else
+                    {
+                        string error = SekaiGachaGetImageError(handle);
+                        fail(status, string.IsNullOrEmpty(error) ? "image_load_failed" : error);
+                    }
+                    yield break;
+                }
+            }
+            finally
+            {
+                SekaiGachaReleaseImageLoad(handle);
+            }
+        }
+#endif
+
+        static IEnumerator Fetch(string path, string[] hosts, Func<string, UnityWebRequest> create, Action<UnityWebRequest> success, Action<long, string> fail)
         {
             long code = 0;
             string error = null;
-            foreach (string host in Hosts)
+            foreach (string host in hosts)
             {
                 using (var request = create(host + "/sekai-" + Region + "-assets/" + path))
                 {
@@ -129,10 +215,7 @@ namespace SekaiGacha
 
         static void Identify(UnityWebRequest request)
         {
-#if UNITY_WEBGL && !UNITY_EDITOR
-            // 浏览器不允许脚本改 User-Agent，改用自定义请求头；资源桶的跨域预检放行该请求头。
-            request.SetRequestHeader("X-SekaiGacha-Client", UserAgent);
-#else
+#if !UNITY_WEBGL || UNITY_EDITOR
             request.SetRequestHeader("User-Agent", UserAgent);
 #endif
         }

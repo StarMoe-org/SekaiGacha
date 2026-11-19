@@ -19,12 +19,14 @@
     // 嵌入协议（v1）。宿主用 <iframe allow="autoplay; fullscreen"> 嵌入本页，消息都是 { type: "sekai-gacha:*", ... } 对象。
     //
     // 宿主 → 本页（只接受直接父窗口发来的消息；未就绪前收到的 play 会在就绪后执行）：
-    //   { type: "sekai-gacha:play", cards: [{ id: "res001_no004", rarity: "rarity_4" }, ...], region?: "cn" }
+    //   { type: "sekai-gacha:play", cards: [{ id: "res001_no004", rarity: "rarity_4" }, ...], region?: "cn", assetSource?: "main" }
     //       1 至 10 张卡，按顺序揭卡。rarity 取主数据 cardRarityType（rarity_2 / rarity_3 / rarity_4 / rarity_birthday），
     //       决定开场预告和揭卡演出；只给资源名字符串（如 "res001_no004"）时不知道稀有度，按 ★4 演出。
     //       可选 prefix、phrase 取主数据 prefix（卡名）和 gachaPhrase（招募台词），按纯文本显示，各至多 64 字；
     //       ★2 只显示卡名。可选 region 为这些文字所属的服务器（jp / en / tw / cn / kr，缺省 jp）：
-    //       tw、cn、kr 改用中文、韩文字体（台服客户端的做法），第一次用到时另行下载约 2 MB
+    //       tw、cn、kr 改用中文、韩文字体（台服客户端的做法），第一次用到时另行下载约 2 MB。
+    //       可选 assetSource 指定资源线路（"main" 优先 storage.pjsk.moe 备用 storage.exmeaning.com；"backup" 顺序相反；缺省 "main"）
+    //   { type: "sekai-gacha:config", assetSource: "main" | "backup" } 仅更新资源线路，不触发演出
     //   { type: "sekai-gacha:skip" }                                 与原版跳过相同：跳过开场和可跳的卡，停在下一张 ★4、生日卡或新获得的 ★3；
     //                                                                此后一直处于跳过模式，没有剩下的卡时结束。画面右上角有原版的跳过按钮
     //                                                                （tap / intro / reveal 期间一直显示），宿主不必再放；宿主的控件别盖住画面右上角
@@ -43,6 +45,15 @@
     // 浏览器只在用户与页面交互后允许播放声音；宿主需在 iframe 上委托 autoplay，或让用户先点击 iframe。
     (function () {
       var PREFIX = "sekai-gacha:";
+      var CACHE_NAME = "sekai-gacha-assets-v1";
+      var CACHE_KEY_ORIGIN = "https://sekai-gacha.cache";
+      var DEFAULT_MAX_CACHE_ENTRIES = 250;
+      var REQUEST_TIMEOUT_MS = 60000;
+      var DEFAULT_HOSTS = ["https://storage.pjsk.moe", "https://storage.exmeaning.com"];
+      var ALLOWED_HOSTS = {
+        "https://storage.pjsk.moe": true,
+        "https://storage.exmeaning.com": true
+      };
       var embedded = window.parent !== window;
       window.SekaiGachaHost = {
         inbox: [],
@@ -61,8 +72,278 @@
       }
 
       var buildUrl = "Build";
+      var dataUrl = buildUrl + "/{{{ DATA_FILENAME }}}";
+
+      // 构建按不可变版本目录发布，存储桶资源均带长缓存；引擎数据包、CJK 字体包和卡牌语音全部走 immutable，避免重复校验或重下。
+      function cacheControl(url) {
+        if (typeof url !== "string") return "no-store";
+        if (url === dataUrl) return "immutable";
+        if (/\/Build\/[^/?#]+\.data($|\?)/.test(url)) return "immutable";
+        if (/\.bundle($|\?)/.test(url)) return "immutable";
+        if (/\/sound\/gacha\/get_voice\/[^/?#]+\/[^/?#]+\.mp3($|\?)/.test(url)) return "immutable";
+        return "no-store";
+      }
+
+      function normalizeHosts(hosts) {
+        var list = [];
+        if (Array.isArray(hosts)) {
+          for (var i = 0; i < hosts.length; i++) {
+            var h = hosts[i];
+            if (typeof h === "string" && ALLOWED_HOSTS[h] && list.indexOf(h) === -1) list.push(h);
+          }
+        }
+        return list.length ? list : DEFAULT_HOSTS.slice();
+      }
+
+      function cacheKey(path) {
+        return CACHE_KEY_ORIGIN + "/sekai-jp-assets/" + String(path || "").replace(/^\/+/, "");
+      }
+
+      function openCache() {
+        try {
+          if (typeof window.caches === "undefined" || !window.caches || typeof window.caches.open !== "function") {
+            return Promise.resolve(null);
+          }
+          return window.caches.open(CACHE_NAME).catch(function () { return null; });
+        } catch (err) {
+          return Promise.resolve(null);
+        }
+      }
+
+      function deleteCachedBlob(path) {
+        var key = cacheKey(path);
+        return openCache().then(function (cache) {
+          if (!cache) return;
+          return cache.delete(key);
+        }).catch(function () {});
+      }
+
+      function readCachedBlob(path) {
+        var key = cacheKey(path);
+        return openCache().then(function (cache) {
+          if (!cache) return null;
+          return cache.match(key).then(function (response) {
+            if (!response) return null;
+            var cloneForLru = typeof response.clone === "function" ? response.clone() : null;
+            return response.blob().then(function (blob) {
+              if (!blob || blob.size === 0) {
+                return cache.delete(key).catch(function () {}).then(function () { return null; });
+              }
+              if (!cloneForLru) return blob;
+              return cache.delete(key)
+                .then(function () { return cache.put(key, cloneForLru); })
+                .catch(function () {})
+                .then(function () { return blob; });
+            });
+          });
+        }).catch(function () { return null; });
+      }
+
+      function storeCachedBlob(path, response) {
+        var key = cacheKey(path);
+        return openCache().then(function (cache) {
+          if (!cache) return;
+          return cache.delete(key)
+            .catch(function () {})
+            .then(function () { return cache.put(key, response); })
+            .then(function () { return cache.keys(); })
+            .then(function (keys) {
+              var limit = assetApi.maxCacheEntries > 0 ? assetApi.maxCacheEntries : DEFAULT_MAX_CACHE_ENTRIES;
+              var excess = keys.length - limit;
+              if (excess <= 0) return;
+              var deletions = [];
+              for (var i = 0; i < excess; i++) {
+                deletions.push(cache.delete(keys[i]).catch(function () {}));
+              }
+              return Promise.all(deletions);
+            });
+        }).catch(function () {});
+      }
+
+      function isValidImageResponse(response) {
+        var type = response && response.headers && typeof response.headers.get === "function"
+          ? (response.headers.get("content-type") || "").toLowerCase()
+          : "";
+        if (!type) return true;
+        return type.indexOf("image/") === 0 || type.indexOf("application/octet-stream") === 0;
+      }
+
+      function fetchFromNetwork(path, hosts) {
+        var cleanPath = String(path || "").replace(/^\/+/, "");
+        var ordered = normalizeHosts(hosts);
+        var index = 0;
+        var lastStatus = 0;
+        var lastError = "network_error";
+
+        function attempt() {
+          if (index >= ordered.length) {
+            return Promise.resolve({ ok: false, status: lastStatus, error: lastError });
+          }
+          var url = ordered[index++] + "/sekai-jp-assets/" + cleanPath;
+          var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+          var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
+          var init = { method: "GET", mode: "cors", credentials: "omit" };
+          if (controller) init.signal = controller.signal;
+
+          function clearTimer() {
+            if (timer !== null) { clearTimeout(timer); timer = null; }
+          }
+
+          return fetch(url, init).then(function (response) {
+            clearTimer();
+            if (response.status === 404) {
+              return { ok: false, status: 404, error: "HTTP 404" };
+            }
+            if (response.status !== 200) {
+              lastStatus = response.status;
+              lastError = "HTTP " + response.status;
+              return attempt();
+            }
+            if (!isValidImageResponse(response)) {
+              lastStatus = response.status;
+              lastError = "invalid_content_type";
+              return attempt();
+            }
+            var responseForCache = typeof response.clone === "function" ? response.clone() : null;
+            return response.blob().then(function (blob) {
+              if (!blob || blob.size === 0) {
+                lastStatus = response.status;
+                lastError = "empty_response";
+                return attempt();
+              }
+              var save = responseForCache ? storeCachedBlob(cleanPath, responseForCache) : Promise.resolve();
+              return save.then(function () {
+                return { ok: true, blob: blob, status: 200, cached: false };
+              });
+            });
+          }).catch(function (err) {
+            clearTimer();
+            lastStatus = 0;
+            lastError = String(err && err.message ? err.message : err);
+            return attempt();
+          });
+        }
+
+        return attempt();
+      }
+
+      function fetchImageBlob(path, hosts) {
+        var cleanPath = String(path || "").replace(/^\/+/, "");
+        return readCachedBlob(cleanPath).then(function (cachedBlob) {
+          if (cachedBlob) return { ok: true, blob: cachedBlob, status: 200, cached: true };
+          return fetchFromNetwork(cleanPath, hosts);
+        });
+      }
+
+      function drawFlippedRgba(source, width, height) {
+        if (!width || !height) throw new Error("invalid_image_dimensions");
+        var canvas;
+        if (typeof OffscreenCanvas !== "undefined") {
+          canvas = new OffscreenCanvas(width, height);
+        } else {
+          canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+        }
+        try {
+          var ctx = canvas.getContext("2d", { willReadFrequently: true }) || canvas.getContext("2d");
+          if (!ctx) throw new Error("canvas_2d_unavailable");
+          ctx.clearRect(0, 0, width, height);
+          ctx.save();
+          // Unity Texture2D.LoadRawTextureData 行序自底向上，绘制前纵向翻转以兼容全部浏览器。
+          ctx.translate(0, height);
+          ctx.scale(1, -1);
+          ctx.drawImage(source, 0, 0);
+          ctx.restore();
+          var imageData = ctx.getImageData(0, 0, width, height);
+          var pixels = new Uint8Array(imageData.data.buffer, imageData.data.byteOffset, imageData.data.byteLength);
+          return { width: width, height: height, pixels: pixels };
+        } finally {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+      }
+
+      function decodeViaImageElement(blob) {
+        return new Promise(function (resolve, reject) {
+          if (typeof Image === "undefined" || typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+            reject(new Error("image_decoder_unavailable"));
+            return;
+          }
+          var objectUrl = URL.createObjectURL(blob);
+          var img = new Image();
+          img.decoding = "async";
+          img.onload = function () {
+            try {
+              var w = img.naturalWidth || img.width;
+              var h = img.naturalHeight || img.height;
+              resolve(drawFlippedRgba(img, w, h));
+            } catch (err) {
+              reject(err);
+            } finally {
+              URL.revokeObjectURL(objectUrl);
+            }
+          };
+          img.onerror = function () {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error("image_decode_failed"));
+          };
+          img.src = objectUrl;
+        });
+      }
+
+      function decodeImageBlob(blob) {
+        if (typeof createImageBitmap === "function") {
+          return createImageBitmap(blob).then(function (bitmap) {
+            try {
+              return drawFlippedRgba(bitmap, bitmap.width, bitmap.height);
+            } finally {
+              if (bitmap && typeof bitmap.close === "function") bitmap.close();
+            }
+          }).catch(function () {
+            return decodeViaImageElement(blob);
+          });
+        }
+        return decodeViaImageElement(blob);
+      }
+
+      function loadImage(path, hosts) {
+        return fetchImageBlob(path, hosts).then(function (fetched) {
+          if (!fetched.ok) return fetched;
+          return decodeImageBlob(fetched.blob).then(function (decoded) {
+            return { ok: true, width: decoded.width, height: decoded.height, pixels: decoded.pixels, status: 200 };
+          }).catch(function (err) {
+            if (!fetched.cached) {
+              return { ok: false, status: 0, error: "decode_failed: " + String(err && err.message ? err.message : err) };
+            }
+            // 缓存项损坏时清理后回源重试一次。
+            return deleteCachedBlob(path).then(function () {
+              return fetchFromNetwork(path, hosts);
+            }).then(function (retried) {
+              if (!retried.ok) return retried;
+              return decodeImageBlob(retried.blob).then(function (decoded) {
+                return { ok: true, width: decoded.width, height: decoded.height, pixels: decoded.pixels, status: 200 };
+              }).catch(function (retryErr) {
+                return { ok: false, status: 0, error: "decode_failed: " + String(retryErr && retryErr.message ? retryErr.message : retryErr) };
+              });
+            });
+          });
+        });
+      }
+
+      var assetApi = {
+        cacheName: CACHE_NAME,
+        maxCacheEntries: DEFAULT_MAX_CACHE_ENTRIES,
+        cacheControl: cacheControl,
+        fetchImageBlob: fetchImageBlob,
+        decodeImageBlob: decodeImageBlob,
+        loadImage: loadImage,
+        _jobs: { nextId: 1, map: {} }
+      };
+      window.SekaiGachaAssets = assetApi;
+
       var config = {
-        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        dataUrl: dataUrl,
         frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
 #if USE_THREADS
         workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
@@ -80,6 +361,7 @@
         companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
         productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
         productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        cacheControl: cacheControl,
         // 高分屏上限 2 倍，避免手机按 3 倍分辨率渲染。
         devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2),
         showBanner: function (message, type) {
